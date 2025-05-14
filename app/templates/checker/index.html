@@ -5,38 +5,56 @@
 {% block content %}
 <div class="row mb-4">
     <div class="col-12">
-        <h1 class="display-5 fw-bold text-primary">Property Verification</h1>
-        <p class="lead text-muted">Verify properties and download verified data</p>
+        <div class="d-flex align-items-center">
+            <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3">
+                <i class="bi bi-shield-check text-primary fs-3"></i>
+            </div>
+            <div>
+                <h1 class="display-5 fw-bold text-primary m-0">Property Verification</h1>
+                <p class="lead text-secondary mb-0">Verify properties against SFR3 criteria and download verified data</p>
+            </div>
+        </div>
     </div>
 </div>
 
 <!-- Verification Controls -->
-<div class="row mb-4">
-    <div class="col-md-8">
-        <div class="card border-0">
+<div class="row mb-4 g-4">
+    <div class="col-lg-8">
+        <div class="card border-0 h-100">
             <div class="card-body">
-                <h5 class="card-title fw-bold">Run Verification</h5>
+                <div class="d-flex align-items-center mb-3">
+                    <i class="bi bi-gear-fill fs-4 text-primary me-2"></i>
+                    <h5 class="card-title fw-bold m-0">Verification Settings</h5>
+                </div>
                 <form id="checkerForm" class="row g-3 mt-2">
                     <div class="col-md-3">
-                        <label for="maxThreads" class="form-label">Threads</label>
+                        <label for="maxThreads" class="form-label">
+                            <i class="bi bi-cpu me-1"></i>Threads
+                        </label>
                         <input type="number" class="form-control" id="maxThreads" name="max_threads" min="1" max="50" value="10">
-                        <div class="form-text">Number of parallel threads</div>
+                        <div class="form-text">Parallel verification threads</div>
                     </div>
                     
                     <div class="col-md-3">
-                        <label for="totalProperties" class="form-label">Total Limit</label>
+                        <label for="totalProperties" class="form-label">
+                            <i class="bi bi-calculator me-1"></i>Total Limit
+                        </label>
                         <input type="number" class="form-control" id="totalProperties" name="total_properties" min="0" placeholder="All">
-                        <div class="form-text">Max properties to verify</div>
+                        <div class="form-text">Maximum properties to verify</div>
                     </div>
                     
                     <div class="col-md-3">
-                        <label for="apiDelay" class="form-label">API Delay (sec)</label>
+                        <label for="apiDelay" class="form-label">
+                            <i class="bi bi-hourglass-split me-1"></i>API Delay
+                        </label>
                         <input type="number" class="form-control" id="apiDelay" name="api_delay" min="0.1" step="0.1" value="1">
-                        <div class="form-text">Seconds between requests</div>
+                        <div class="form-text">Seconds between API calls</div>
                     </div>
                     
                     <div class="col-md-3">
-                        <label for="sourceSelect" class="form-label">Source Filter</label>
+                        <label for="sourceSelect" class="form-label">
+                            <i class="bi bi-filter me-1"></i>Source Filter
+                        </label>
                         <select class="form-select" id="sourceSelect" name="source">
                             <option value="">All Sources</option>
                             <option value="zillow">Zillow</option>
@@ -46,42 +64,53 @@
                     </div>
                     
                     <div class="col-md-12 mt-2">
-                        <div class="alert alert-info" role="alert">
-                            <i class="bi bi-info-circle-fill"></i> The verification process will pause for 5 seconds after every 100 properties to avoid API rate limits.
+                        <div class="alert alert-info d-flex align-items-center" role="alert">
+                            <i class="bi bi-info-circle-fill fs-5 me-2"></i>
+                            <div>
+                                The verification process will pause for 5 seconds after every 100 API requests to avoid rate limiting.
+                            </div>
                         </div>
                     </div>
                     
                     <div class="col-md-12">
-                        <div class="alert alert-warning d-none" id="limitWarning" role="alert">
-                            <i class="bi bi-exclamation-triangle-fill"></i> Processing more than 5,000 properties at once may take a long time.
+                        <div class="alert alert-warning d-none d-flex align-items-center" id="limitWarning" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill fs-5 me-2"></i>
+                            <div>
+                                Processing more than 5,000 properties at once may take a long time and could encounter API rate limits.
+                            </div>
                         </div>
                     </div>
                     
                     <div class="col-md-12">
-                        <div class="form-check">
+                        <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="includeFailed" name="include_failed" checked>
                             <label class="form-check-label" for="includeFailed">
-                                Include API errors
+                                Include API errors in verification
                             </label>
-                            <div class="form-text">Retry API_ERROR properties (including rate limit errors)</div>
+                            <div class="form-text">Retry properties that failed due to API errors (including rate limit errors)</div>
                         </div>
                     </div>
                     
-                    <div class="col-12 mt-3">
-                        <button type="submit" class="btn btn-primary" id="startCheckerBtn">Start Verification</button>
+                    <div class="col-12 mt-4">
+                        <button type="submit" class="btn btn-primary" id="startCheckerBtn">
+                            <i class="bi bi-play-fill me-1"></i>Start Verification
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
     
-    <div class="col-md-4">
+    <div class="col-lg-4">
         <div class="card border-0 h-100">
             <div class="card-body">
-                <h5 class="card-title fw-bold">Data Export</h5>
-                <p class="card-text">Download verified properties as CSV file for further analysis</p>
-                <a href="/checker/download" class="btn btn-success">
-                    <i class="bi bi-download"></i> Download Verified Properties
+                <div class="d-flex align-items-center mb-3">
+                    <i class="bi bi-download fs-4 text-success me-2"></i>
+                    <h5 class="card-title fw-bold m-0">Data Export</h5>
+                </div>
+                <p class="card-text text-secondary mb-4">Download verified properties as CSV file for your analysis and follow-up actions.</p>
+                <a href="/checker/download" class="btn btn-success d-flex align-items-center justify-content-center w-100">
+                    <i class="bi bi-file-earmark-spreadsheet me-2"></i> Download Verified Properties
                 </a>
             </div>
         </div>
@@ -92,63 +121,72 @@
 <div class="row mb-4">
     <div class="col-12">
         <div class="card border-0">
-            <div class="card-header bg-transparent border-0">
+            <div class="card-header bg-transparent">
                 <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="card-title fw-bold mb-0">Verification Status</h5>
-                    <span class="badge bg-{{ 'success' if status.running else 'secondary' }}" id="checkerStatus">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-activity fs-4 text-primary me-2"></i>
+                        <h5 class="card-title fw-bold mb-0">Verification Status</h5>
+                    </div>
+                    <span class="badge fs-6 bg-{{ 'success' if status.running else 'secondary' }}" id="checkerStatus">
+                        <i class="bi bi-{{ 'play-fill' if status.running else 'stop-fill' }} me-1"></i>
                         {{ 'Running' if status.running else 'Idle' }}
                     </span>
                 </div>
             </div>
             <div class="card-body">
-                <p class="card-text mb-3" id="checkerMessage">{{ status.message }}</p>
+                <p class="card-text mb-3 text-secondary" id="checkerMessage">{{ status.message }}</p>
                 
                 <div class="row mb-4">
                     <div class="col-12">
-                        <div class="progress mb-2">
-                            <div class="progress-bar bg-primary" id="checkerProgress" role="progressbar" 
+                        <div class="progress mb-2" style="height: 15px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" id="checkerProgress" role="progressbar" 
                                  style="width: {{ status.progress / status.total * 100 if status.total > 0 else 0 }}%">
                                 {{ status.progress }} / {{ status.total }}
                             </div>
                         </div>
                         <div class="d-flex justify-content-between">
-                            <small>Properties checked</small>
-                            <small class="text-muted" id="checkerProgressText">
+                            <small class="text-secondary">Properties verified</small>
+                            <small class="text-primary fw-bold" id="checkerProgressText">
                                 {{ status.progress }} / {{ status.total }}
                             </small>
                         </div>
                     </div>
                 </div>
                 
-                <div class="row gx-2 gy-3">
+                <div class="row g-4">
                     <div class="col-md-3">
-                        <div class="p-3 border rounded bg-success bg-opacity-10 text-success text-center">
-                            <h3 id="verifiedCount">{{ status.verified_count }}</h3>
-                            <small>Verified</small>
+                        <div class="p-4 rounded-3 bg-success bg-opacity-10 text-center h-100 d-flex flex-column justify-content-center">
+                            <i class="bi bi-check-circle fs-3 text-success mb-2"></i>
+                            <h3 class="mb-0 fw-bold text-success" id="verifiedCount">{{ status.verified_count }}</h3>
+                            <small class="text-secondary">Verified</small>
                         </div>
                     </div>
                     <div class="col-md-3">
-                        <div class="p-3 border rounded bg-danger bg-opacity-10 text-danger text-center">
-                            <h3 id="failedCount">{{ status.failed_count }}</h3>
-                            <small>Failed</small>
+                        <div class="p-4 rounded-3 bg-danger bg-opacity-10 text-center h-100 d-flex flex-column justify-content-center">
+                            <i class="bi bi-x-circle fs-3 text-danger mb-2"></i>
+                            <h3 class="mb-0 fw-bold text-danger" id="failedCount">{{ status.failed_count }}</h3>
+                            <small class="text-secondary">Failed</small>
                         </div>
                     </div>
                     <div class="col-md-2">
-                        <div class="p-3 border rounded bg-secondary bg-opacity-10 text-secondary text-center">
-                            <h3 id="apiErrorCount">{{ status.api_error_count }}</h3>
-                            <small>API Errors</small>
+                        <div class="p-4 rounded-3 bg-secondary bg-opacity-10 text-center h-100 d-flex flex-column justify-content-center">
+                            <i class="bi bi-exclamation-triangle fs-3 text-secondary mb-2"></i>
+                            <h3 class="mb-0 fw-bold text-secondary" id="apiErrorCount">{{ status.api_error_count }}</h3>
+                            <small class="text-secondary">API Errors</small>
                         </div>
                     </div>
                     <div class="col-md-2">
-                        <div class="p-3 border rounded bg-warning bg-opacity-10 text-warning text-center">
-                            <h3 id="sqftCount">{{ status.square_footage_count }}</h3>
-                            <small>Sq. Footage</small>
+                        <div class="p-4 rounded-3 bg-warning bg-opacity-10 text-center h-100 d-flex flex-column justify-content-center">
+                            <i class="bi bi-rulers fs-3 text-warning mb-2"></i>
+                            <h3 class="mb-0 fw-bold text-warning" id="sqftCount">{{ status.square_footage_count }}</h3>
+                            <small class="text-secondary">Sq. Footage</small>
                         </div>
                     </div>
                     <div class="col-md-2">
-                        <div class="p-3 border rounded bg-info bg-opacity-10 text-info text-center">
-                            <h3 id="notInterestedCount">{{ status.not_interested_count }}</h3>
-                            <small>Not Interested</small>
+                        <div class="p-4 rounded-3 bg-info bg-opacity-10 text-center h-100 d-flex flex-column justify-content-center">
+                            <i class="bi bi-house-slash fs-3 text-info mb-2"></i>
+                            <h3 class="mb-0 fw-bold text-info" id="notInterestedCount">{{ status.not_interested_count }}</h3>
+                            <small class="text-secondary">Not Interested</small>
                         </div>
                     </div>
                 </div>
@@ -158,21 +196,26 @@
 </div>
 
 <!-- Verification Statistics -->
-<div class="row">
+<div class="row g-4 mb-4">
     <!-- Verification Status -->
-    <div class="col-md-5 mb-4">
+    <div class="col-md-5">
         <div class="card border-0 h-100">
             <div class="card-body">
-                <h5 class="card-title fw-bold">Verification Status</h5>
+                <div class="d-flex align-items-center mb-3">
+                    <i class="bi bi-pie-chart-fill fs-4 text-primary me-2"></i>
+                    <h5 class="card-title fw-bold m-0">Verification Status</h5>
+                </div>
                 <div style="height: 220px; max-height: 220px; overflow: hidden;" class="chart-container">
                     <canvas id="verificationChart"></canvas>
                 </div>
-                <div class="d-flex justify-content-center mt-3">
-                    <div class="px-3">
-                        <span class="badge bg-success">{{ stats.verification_status.verified_count }}</span> Verified
+                <div class="d-flex justify-content-center gap-4 mt-3">
+                    <div class="d-flex align-items-center">
+                        <span class="badge bg-success me-2">{{ stats.verification_status.verified_count }}</span> 
+                        <span class="text-secondary">Verified</span>
                     </div>
-                    <div class="px-3">
-                        <span class="badge bg-danger">{{ stats.verification_status.unverified_count }}</span> Unverified
+                    <div class="d-flex align-items-center">
+                        <span class="badge bg-danger me-2">{{ stats.verification_status.unverified_count }}</span> 
+                        <span class="text-secondary">Unverified</span>
                     </div>
                 </div>
             </div>
@@ -180,10 +223,13 @@
     </div>
     
     <!-- Verification by Source -->
-    <div class="col-md-7 mb-4">
+    <div class="col-md-7">
         <div class="card border-0 h-100">
             <div class="card-body">
-                <h5 class="card-title fw-bold">Verification by Source</h5>
+                <div class="d-flex align-items-center mb-3">
+                    <i class="bi bi-bar-chart-fill fs-4 text-primary me-2"></i>
+                    <h5 class="card-title fw-bold m-0">Verification by Source</h5>
+                </div>
                 <div style="height: 220px; max-height: 220px; overflow: hidden;" class="chart-container">
                     <canvas id="sourceVerificationChart"></canvas>
                 </div>
@@ -192,12 +238,15 @@
     </div>
 </div>
 
-<div class="row">
+<div class="row g-4">
     <!-- Failure Reasons -->
-    <div class="col-md-6 mb-4">
+    <div class="col-md-6">
         <div class="card border-0 h-100">
             <div class="card-body">
-                <h5 class="card-title fw-bold">Failure Reasons</h5>
+                <div class="d-flex align-items-center mb-3">
+                    <i class="bi bi-clipboard-x-fill fs-4 text-primary me-2"></i>
+                    <h5 class="card-title fw-bold m-0">Failure Reasons</h5>
+                </div>
                 <div style="height: 220px; max-height: 220px; overflow: hidden;" class="chart-container">
                     <canvas id="failureChart"></canvas>
                 </div>
@@ -206,13 +255,16 @@
     </div>
     
     <!-- Verification by State -->
-    <div class="col-md-6 mb-4">
+    <div class="col-md-6">
         <div class="card border-0 h-100">
             <div class="card-body">
-                <h5 class="card-title fw-bold">Verification by State</h5>
-                <div style="max-height: 220px; overflow-y: auto;">
+                <div class="d-flex align-items-center mb-3">
+                    <i class="bi bi-geo-alt-fill fs-4 text-primary me-2"></i>
+                    <h5 class="card-title fw-bold m-0">Verification by State</h5>
+                </div>
+                <div class="table-responsive" style="max-height: 220px; overflow-y: auto;">
                     <table class="table table-sm table-hover">
-                        <thead>
+                        <thead class="table-light sticky-top">
                             <tr>
                                 <th>State</th>
                                 <th>Verified</th>
@@ -223,10 +275,10 @@
                         <tbody>
                             {% for item in stats.verification_by_state %}
                             <tr>
-                                <td>{{ item.state }}</td>
-                                <td>{{ item.verified_count }}</td>
-                                <td>{{ item.unverified_count }}</td>
-                                <td>{{ item.total_count }}</td>
+                                <td class="fw-medium">{{ item.state }}</td>
+                                <td class="text-success">{{ item.verified_count }}</td>
+                                <td class="text-danger">{{ item.unverified_count }}</td>
+                                <td class="fw-bold">{{ item.total_count }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -254,6 +306,20 @@
             }
         });
         
+        // Chart color palette
+        const chartColors = {
+            primary: '#4f46e5',
+            secondary: '#64748b',
+            success: '#10b981',
+            danger: '#ef4444',
+            warning: '#f59e0b',
+            info: '#3b82f6',
+            indigo: '#6366f1',
+            purple: '#a855f7',
+            pink: '#ec4899',
+            blue: '#0ea5e9'
+        };
+        
         // Verification Status Chart
         var statusCtx = document.getElementById('verificationChart').getContext('2d');
         var statusChart = new Chart(statusCtx, {
@@ -266,23 +332,26 @@
                         {{ stats.verification_status.unverified_count }}
                     ],
                     backgroundColor: [
-                        'rgba(40, 167, 69, 0.7)',
-                        'rgba(220, 53, 69, 0.7)'
-                    ]
+                        chartColors.success,
+                        chartColors.danger
+                    ],
+                    borderWidth: 0
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
+                cutout: '65%',
                 animation: {
-                    duration: 0 // Disable animation
+                    animateScale: true
                 },
                 plugins: {
                     legend: {
                         display: true,
-                        position: 'top',
+                        position: 'bottom',
                         labels: {
-                            boxWidth: 10
+                            boxWidth: 12,
+                            padding: 15
                         }
                     }
                 }
@@ -299,12 +368,14 @@
                     {
                         label: 'Verified',
                         data: [{% for item in stats.verification_by_source %}{{ item.verified_count }}{% if not loop.last %}, {% endif %}{% endfor %}],
-                        backgroundColor: 'rgba(40, 167, 69, 0.7)'
+                        backgroundColor: chartColors.success,
+                        borderRadius: 4
                     },
                     {
                         label: 'Unverified',
                         data: [{% for item in stats.verification_by_source %}{{ item.unverified_count }}{% if not loop.last %}, {% endif %}{% endfor %}],
-                        backgroundColor: 'rgba(220, 53, 69, 0.7)'
+                        backgroundColor: chartColors.danger,
+                        borderRadius: 4
                     }
                 ]
             },
@@ -312,20 +383,24 @@
                 responsive: true,
                 maintainAspectRatio: true,
                 animation: {
-                    duration: 0 // Disable animation
+                    animateScale: true
                 },
                 plugins: {
                     legend: {
                         display: true,
-                        position: 'top',
+                        position: 'bottom',
                         labels: {
-                            boxWidth: 10
+                            boxWidth: 12,
+                            padding: 15
                         }
                     }
                 },
                 scales: {
                     x: {
-                        stacked: true
+                        stacked: true,
+                        grid: {
+                            display: false
+                        }
                     },
                     y: {
                         stacked: true,
@@ -347,25 +422,27 @@
                 datasets: [{
                     data: [{% for item in stats.failure_reasons %}{{ item.count }}{% if not loop.last %}, {% endif %}{% endfor %}],
                     backgroundColor: [
-                        'rgba(255, 99, 132, 0.7)',
-                        'rgba(54, 162, 235, 0.7)',
-                        'rgba(255, 206, 86, 0.7)',
-                        'rgba(75, 192, 192, 0.7)'
-                    ]
+                        chartColors.danger,
+                        chartColors.warning, 
+                        chartColors.info,
+                        chartColors.secondary
+                    ],
+                    borderWidth: 0
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
                 animation: {
-                    duration: 0 // Disable animation
+                    animateScale: true
                 },
                 plugins: {
                     legend: {
                         display: true,
-                        position: 'top',
+                        position: 'bottom',
                         labels: {
-                            boxWidth: 10
+                            boxWidth: 12,
+                            padding: 15
                         }
                     }
                 }
@@ -406,7 +483,10 @@
                 document.getElementById('checkerProgress').style.width = `${progressPercent}%`;
                 document.getElementById('checkerProgress').textContent = `${data.progress || 0} / ${data.total || 0}`;
                 
-                document.getElementById('checkerStatus').textContent = data.running ? 'Running' : 'Idle';
+                document.getElementById('checkerStatus').innerHTML = data.running ? 
+                    '<i class="bi bi-play-fill me-1"></i> Running' : 
+                    '<i class="bi bi-stop-fill me-1"></i> Idle';
+                    
                 if (data.running) {
                     document.getElementById('checkerStatus').classList.remove('bg-secondary');
                     document.getElementById('checkerStatus').classList.add('bg-success');
@@ -420,7 +500,7 @@
                     
                     // Re-enable start button
                     startCheckerBtn.disabled = false;
-                    startCheckerBtn.textContent = 'Start Verification';
+                    startCheckerBtn.innerHTML = '<i class="bi bi-play-fill me-1"></i> Start Verification';
                 }
                 
                 document.getElementById('checkerProgressText').textContent = `${data.progress || 0} / ${data.total || 0}`;
@@ -438,7 +518,7 @@
     }
     
     // Start polling on page load if checker is running
-    if (document.getElementById('checkerStatus').textContent.trim() === 'Running') {
+    if (document.getElementById('checkerStatus').textContent.trim().includes('Running')) {
         startStatusPolling();
     }
     
@@ -449,7 +529,7 @@
             if (statusIntervalId) {
                 clearInterval(statusIntervalId);
             }
-        } else if (document.getElementById('checkerStatus').textContent.trim() === 'Running') {
+        } else if (document.getElementById('checkerStatus').textContent.trim().includes('Running')) {
             // Resume polling when page becomes visible and checker is running
             startStatusPolling();
         }
@@ -461,7 +541,7 @@
             
             // Disable the button and show loading state
             startCheckerBtn.disabled = true;
-            startCheckerBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...';
+            startCheckerBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Starting...';
             
             // Get form data
             const formData = new FormData(checkerForm);
@@ -482,14 +562,14 @@
                     // Start polling for updates
                     startStatusPolling();
                     // Update status badge
-                    document.getElementById('checkerStatus').textContent = 'Running';
+                    document.getElementById('checkerStatus').innerHTML = '<i class="bi bi-play-fill me-1"></i> Running';
                     document.getElementById('checkerStatus').classList.remove('bg-secondary');
                     document.getElementById('checkerStatus').classList.add('bg-success');
                 } else {
                     alert('Error: ' + data.message);
                     // Re-enable the button
                     startCheckerBtn.disabled = false;
-                    startCheckerBtn.textContent = 'Start Verification';
+                    startCheckerBtn.innerHTML = '<i class="bi bi-play-fill me-1"></i> Start Verification';
                 }
             })
             .catch(error => {
@@ -497,7 +577,7 @@
                 alert('An error occurred: ' + error);
                 // Re-enable the button
                 startCheckerBtn.disabled = false;
-                startCheckerBtn.textContent = 'Start Verification';
+                startCheckerBtn.innerHTML = '<i class="bi bi-play-fill me-1"></i> Start Verification';
             });
         });
     }
