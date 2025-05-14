@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 import logging
 from mysql.connector import pooling
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -18,128 +19,225 @@ logger = logging.getLogger("db_connector")
 # Load environment variables from .env file
 load_dotenv()
 
-# Database connection parameters
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', '127.0.0.1'),
-    'user': os.getenv('DB_USER', 'root'),
-    'password': os.getenv('DB_PASSWORD', '12345678'),
-    'database': os.getenv('DB_NAME', 'lqtincco_sfr3')
+# Global variables
+db_config = {
+    'host': os.getenv('DB_HOST'),
+    'user': os.getenv('DB_USER'),
+    'password': os.getenv('DB_PASSWORD'),
+    'database': os.getenv('DB_NAME')
 }
 
-# Connection pool
-CONNECTION_POOL = None
+# Global connection and pool
+global_connection = None
+connection_pool = None
 
-# Define the table schema
-CREATE_TABLE_QUERY = """
-CREATE TABLE IF NOT EXISTS properties (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    property_id VARCHAR(255) UNIQUE,
-    state VARCHAR(100),
-    property_type VARCHAR(100),
-    occupancy_status VARCHAR(50),
-    address TEXT,
-    zip_code VARCHAR(20),
-    square_footage FLOAT,
-    bedrooms INT,
-    bathrooms DOUBLE,
-    year_built INT,
-    after_repair_value FLOAT,
-    url TEXT,
-    is_verified BOOLEAN DEFAULT FALSE,
-    failure_reason VARCHAR(50) NULL,
-    source VARCHAR(50),
-    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-"""
-
-def initialize_connection_pool(pool_size=5):
-    """Initialize the connection pool with specified size."""
-    global CONNECTION_POOL
-    if CONNECTION_POOL is None:
-        try:
-            CONNECTION_POOL = mysql.connector.pooling.MySQLConnectionPool(
-                pool_name="sfr3_pool",
-                pool_size=pool_size,
-                **DB_CONFIG
-            )
-            logger.info(f"Database connection pool initialized with size {pool_size}")
-        except mysql.connector.Error as err:
-            logger.error(f"Error initializing MySQL connection pool: {err}")
-            raise
+def initialize_db():
+    """Initialize the global database connection when the app starts.
+    
+    This should be called once during application startup.
+    """
+    global global_connection, connection_pool
+    
+    try:
+        # First try connecting directly without a pool for the global connection
+        logger.info("Initializing global database connection...")
+        global_connection = mysql.connector.connect(
+            host=db_config['host'],
+            user=db_config['user'],
+            password=db_config['password'],
+            database=db_config['database'],
+            autocommit=False  # We want to control transactions manually
+        )
+        
+        # Test the connection
+        cursor = global_connection.cursor()
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+        cursor.close()
+        
+        logger.info("Global database connection established successfully")
+        
+        # Create a small pool for additional connections when absolutely needed
+        # This helps with concurrent operations while keeping total connections low
+        pool_size = 5  # Reduced from default 30+
+        logger.info(f"Initializing database connection pool with size {pool_size}")
+        connection_pool = pooling.MySQLConnectionPool(
+            pool_name="app_pool",
+            pool_size=pool_size,
+            **db_config
+        )
+        logger.info(f"Database connection pool initialized with size {pool_size}")
+        
+        # Initialize database tables
+        _initialize_tables()
+        
+        return True
+    except mysql.connector.Error as err:
+        logger.error(f"Error initializing MySQL connection pool: {err}")
+        logger.error(f"Failed to initialize database: {err}")
+        return False
 
 def get_db_connection():
-    """Get a connection from the pool or create a new one if pool is not initialized."""
-    global CONNECTION_POOL
+    """Get the global database connection.
     
-    # Initialize pool if not done already
-    if CONNECTION_POOL is None:
-        initialize_connection_pool()
+    This will return the global connection if it's active,
+    or try to reconnect if it's disconnected.
+    """
+    global global_connection
     
+    # First, check if the global connection exists and is connected
+    if global_connection and global_connection.is_connected():
+        return global_connection
+    
+    # If global connection is not connected, try to reconnect
+    logger.info("Global database connection is not available, attempting to reconnect...")
     try:
-        connection = CONNECTION_POOL.get_connection()
-        if not connection.is_connected():
-            connection.reconnect()
-        return connection
-    except mysql.connector.Error as err:
-        logger.error(f"Error getting connection from pool: {err}")
-        # Fallback to direct connection if pool fails
-        try:
-            connection = mysql.connector.connect(**DB_CONFIG)
-            logger.info("Database connection established (fallback)")
-            return connection
-        except mysql.connector.Error as err:
-            logger.error(f"Error connecting to MySQL database: {err}")
-            raise
-
-def create_tables():
-    """Create the necessary tables if they don't exist."""
-    connection = get_db_connection()
-    try:
-        cursor = connection.cursor()
-        cursor.execute(CREATE_TABLE_QUERY)
-        connection.commit()
-        logger.info("Tables created or already exist")
+        if global_connection:
+            # Try to close the old connection first to avoid lingering connections
+            try:
+                global_connection.close()
+            except:
+                pass
         
-        # Check if failure_reason column exists and add it if it doesn't
+        # Create a new connection
+        global_connection = mysql.connector.connect(
+            host=db_config['host'],
+            user=db_config['user'],
+            password=db_config['password'],
+            database=db_config['database'],
+            autocommit=False
+        )
+        
+        # Test the connection
+        cursor = global_connection.cursor()
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+        cursor.close()
+        
+        logger.info("Global database connection reestablished successfully")
+        return global_connection
+    except mysql.connector.Error as err:
+        logger.error(f"Error reconnecting to database: {err}")
+        
+        # As a last resort, try to get a connection from the pool
+        if connection_pool:
+            try:
+                logger.info("Attempting to get connection from pool as fallback...")
+                return connection_pool.get_connection()
+            except mysql.connector.Error as pool_err:
+                logger.error(f"Error getting connection from pool: {pool_err}")
+        
+        return None
+
+def get_new_connection_from_pool():
+    """Get a new connection from the pool when a separate connection is absolutely necessary.
+    
+    This should be used sparingly for operations that need to be isolated from the main connection.
+    """
+    global connection_pool
+    
+    if connection_pool:
         try:
-            cursor.execute("SHOW COLUMNS FROM properties LIKE 'failure_reason'")
-            column_exists = cursor.fetchone() is not None
-            
-            if not column_exists:
-                # Add the column
-                cursor.execute("ALTER TABLE properties ADD COLUMN failure_reason VARCHAR(50) NULL")
-                connection.commit()
-                logger.info("Added failure_reason column to properties table")
+            return connection_pool.get_connection()
         except mysql.connector.Error as err:
-            logger.error(f"Error checking/adding failure_reason column: {err}")
-            
-        # Force modify bathrooms column type to DOUBLE regardless of current type
+            logger.error(f"Error getting connection from pool: {err}")
+    
+    logger.error("Connection pool is not initialized")
+    return None
+
+def close_db_connection():
+    """Close the global database connection.
+    
+    This should be called when shutting down the application.
+    """
+    global global_connection
+    
+    if global_connection:
         try:
-            # First check current type
-            cursor.execute("SHOW COLUMNS FROM properties LIKE 'bathrooms'")
-            column_info = cursor.fetchone()
-            
-            # Always modify to ensure it's DOUBLE
-            cursor.execute("ALTER TABLE properties MODIFY COLUMN bathrooms DOUBLE")
-            connection.commit()
+            if global_connection.is_connected():
+                global_connection.close()
+                logger.info("Global database connection closed successfully")
+        except Exception as e:
+            logger.error(f"Error closing global database connection: {e}")
+        finally:
+            global_connection = None
+
+def _initialize_tables():
+    """Initialize the required database tables if they don't exist."""
+    if not global_connection or not global_connection.is_connected():
+        logger.error("Cannot initialize tables: No database connection")
+        return False
+    
+    try:
+        cursor = global_connection.cursor()
+        
+        # Create properties table if it doesn't exist
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS properties (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            property_id VARCHAR(50) NOT NULL UNIQUE,
+            address TEXT,
+            city VARCHAR(100),
+            state VARCHAR(50),
+            zip VARCHAR(20),
+            price DECIMAL(12, 2),
+            bedrooms DECIMAL(5, 2),
+            bathrooms DECIMAL(5, 2),
+            square_footage INT,
+            lot_size VARCHAR(50),
+            year_built INT,
+            property_type VARCHAR(50),
+            source VARCHAR(50),
+            url TEXT,
+            is_verified BOOLEAN DEFAULT FALSE,
+            failure_reason VARCHAR(50),
+            date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status VARCHAR(50) DEFAULT 'active',
+            photo_urls TEXT,
+            raw_data LONGTEXT
+        )
+        """)
+        
+        # Ensure bathrooms column is DOUBLE type
+        try:
+            cursor.execute("ALTER TABLE properties MODIFY bathrooms DOUBLE")
             logger.info("Ensured bathrooms column type is DOUBLE")
         except mysql.connector.Error as err:
-            logger.error(f"Error modifying bathrooms column: {err}")
-            
+            # If the alteration fails, it's likely already the correct type
+            pass
+        
+        global_connection.commit()
+        logger.info("Tables created or already exist")
+        cursor.close()
+        return True
+    
     except mysql.connector.Error as err:
-        logger.error(f"Error creating tables: {err}")
-        raise
-    finally:
-        if connection.is_connected():
-            cursor.close()
-            connection.close()
+        logger.error(f"Error initializing tables: {err}")
+        return False
+
+# Legacy function for backward compatibility
+def get_db_connection_from_pool():
+    """Legacy function that now returns the global connection or a pool connection as fallback.
+    
+    This maintains backward compatibility with code that expects a connection from the pool.
+    """
+    conn = get_db_connection()
+    if conn:
+        return conn
+    
+    # If global connection fails, try pool as fallback
+    return get_new_connection_from_pool()
 
 def property_exists(property_id, connection=None):
     """Check if a property with the given ID already exists in the database."""
     close_connection = False
     if not connection:
         connection = get_db_connection()
-        close_connection = True
+        close_connection = True  # Only close if we created a new connection
+        
+    if not connection:
+        logger.error("Cannot check if property exists: No database connection")
+        return False if not isinstance(property_id, list) else {}
         
     try:
         cursor = connection.cursor()
@@ -166,8 +264,10 @@ def property_exists(property_id, connection=None):
         logger.error(f"Error checking for existing property: {err}")
         return {} if isinstance(property_id, list) else False
     finally:
-        if close_connection and connection.is_connected():
+        if cursor:
             cursor.close()
+        # Only close the connection if we created it
+        if close_connection and connection and hasattr(connection, 'is_connected') and connection.is_connected():
             connection.close()
 
 def insert_property(property_data, source):
@@ -196,6 +296,9 @@ def insert_property(property_data, source):
         return False
     
     connection = get_db_connection()
+    if not connection:
+        logger.error("Cannot insert property: No database connection")
+        return False
     
     try:
         # Check if property already exists
@@ -225,9 +328,9 @@ def insert_property(property_data, source):
         connection.rollback()
         return False
     finally:
-        if connection.is_connected():
+        if cursor:
             cursor.close()
-            connection.close()
+        # Don't close the connection since we're using a singleton pattern
 
 def batch_insert_properties(properties_list, source):
     """Insert multiple properties efficiently in batches."""
@@ -238,6 +341,9 @@ def batch_insert_properties(properties_list, source):
     simplified_source = source.split('-')[0] if '-' in source else source
     
     connection = get_db_connection()
+    if not connection:
+        logger.error("Cannot insert properties: No database connection")
+        return 0, 0
     
     try:
         cursor = connection.cursor()
@@ -332,13 +438,16 @@ def batch_insert_properties(properties_list, source):
         connection.rollback()
         return 0, 0
     finally:
-        if connection.is_connected():
+        if cursor:
             cursor.close()
-            connection.close()
+        # Don't close the connection since we're using a singleton pattern
 
 def update_verification_status(property_id, is_verified=True):
     """Update the verification status of a property."""
     connection = get_db_connection()
+    if not connection:
+        logger.error(f"Cannot update verification status for {property_id}: No database connection")
+        return False
     
     try:
         cursor = connection.cursor()
@@ -358,13 +467,21 @@ def update_verification_status(property_id, is_verified=True):
         connection.rollback()
         return False
     finally:
-        if connection.is_connected():
+        if cursor:
             cursor.close()
-            connection.close()
+        # Don't close the connection since we're using a singleton pattern
+
+# Function for scrapers to call for table creation
+def create_tables():
+    """
+    Legacy function for scrapers to call before inserting data.
+    This now just uses the internal _initialize_tables function.
+    """
+    logger.info("Ensuring database tables exist (called from scraper)")
+    return _initialize_tables()
 
 # Initialize the connection pool and database when module is imported
 try:
-    initialize_connection_pool(pool_size=30)
-    create_tables()
+    initialize_db()
 except Exception as e:
     logger.error(f"Failed to initialize database: {e}") 

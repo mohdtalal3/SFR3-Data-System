@@ -32,26 +32,12 @@ RECOMMENDED_LIMIT = 5000  # Recommended maximum properties to process at once
 MAX_RETRIES = 3  # Maximum number of retries for db operations
 DB_BATCH_SIZE = 100  # Size of batches for database updates
 
-def get_connection():
-    """Get a database connection."""
-    try:
-        connection = db_connector.get_db_connection()
-    except Exception as e:
-        logger.error(f"Error getting connection: {e}")
-        # Sleep and retry
-        time.sleep(0.5)
-        connection = db_connector.get_db_connection()
-    
-    return connection
-
-def close_connection(connection):
-    """Close the database connection."""
-    if connection and connection.is_connected():
-        connection.close()
-
 def get_properties_to_verify(batch_size=DEFAULT_BATCH_SIZE, source=None, include_failed=True, retry_api_only=False):
     """Get a batch of properties from the database."""
-    connection = get_connection()
+    connection = db_connector.get_db_connection()
+    if not connection:
+        logger.error("Cannot get properties: No database connection")
+        return []
     
     for retry in range(MAX_RETRIES):
         try:
@@ -152,12 +138,10 @@ def get_properties_to_verify(batch_size=DEFAULT_BATCH_SIZE, source=None, include
             if retry < MAX_RETRIES - 1:
                 logger.info(f"Retrying... ({retry + 1}/{MAX_RETRIES})")
                 time.sleep(1)  # Wait before retrying
-                # Refresh connection
-                try:
-                    connection.close()
-                except:
-                    pass
-                connection = get_connection()
+                # Try to get a fresh connection
+                connection = db_connector.get_db_connection()
+                if not connection:
+                    return []
             else:
                 logger.error("Max retries reached. Giving up.")
                 return []
@@ -167,8 +151,13 @@ def get_properties_to_verify(batch_size=DEFAULT_BATCH_SIZE, source=None, include
     
     return []
 
-def get_property_details(property_id, connection):
+def get_property_details(property_id):
     """Get detailed information for a specific property."""
+    connection = db_connector.get_db_connection()
+    if not connection:
+        logger.error(f"Cannot get property details for {property_id}: No database connection")
+        return None
+    
     for retry in range(MAX_RETRIES):
         try:
             cursor = connection.cursor(dictionary=True)
@@ -187,12 +176,10 @@ def get_property_details(property_id, connection):
             if retry < MAX_RETRIES - 1:
                 logger.info(f"Retrying... ({retry + 1}/{MAX_RETRIES})")
                 time.sleep(1)  # Wait before retrying
-                # Refresh connection
-                try:
-                    connection.close()
-                except:
-                    pass
-                connection = get_connection()
+                # Try to get a fresh connection
+                connection = db_connector.get_db_connection()
+                if not connection:
+                    return None
             else:
                 logger.error("Max retries reached. Giving up.")
                 return None
@@ -282,10 +269,15 @@ def verify_property(property_data):
     # If we get here, the property passed all checks
     return True, None
 
-def batch_update_verification_status(update_batch, connection):
+def batch_update_verification_status(update_batch):
     """Update verification status for multiple properties in a single batch."""
     if not update_batch:
         return 0, 0
+    
+    connection = db_connector.get_db_connection()
+    if not connection:
+        logger.error("Cannot update verification status: No database connection")
+        return 0, len(update_batch)
         
     # Separate the data for verified and non-verified properties
     verified_ids = [item['property_id'] for item in update_batch if item['is_verified']]
@@ -343,7 +335,7 @@ def batch_update_verification_status(update_batch, connection):
     
     return updated_count, failed_count
 
-def process_single_property(prop, connection, update_batch):
+def process_single_property(prop, update_batch):
     """Process a single property for verification."""
     property_id = prop['property_id']
     result = {
@@ -367,7 +359,7 @@ def process_single_property(prop, connection, update_batch):
         return result
     
     # Get detailed property information
-    property_details = get_property_details(property_id, connection)
+    property_details = get_property_details(property_id)
     
     if not property_details:
         logger.warning(f"Could not retrieve details for property {property_id}")
@@ -406,7 +398,16 @@ def process_single_property(prop, connection, update_batch):
 
 def process_verification_batch(properties):
     """Process a batch of properties for verification sequentially."""
-    connection = get_connection()
+    if not db_connector.get_db_connection():
+        logger.error("Cannot process verification batch: No database connection")
+        return {
+            'verified': 0,
+            'failed': 0,
+            'api_error': 0,
+            'square_footage': 0,
+            'not_interested': 0,
+            'no_address': 0
+        }
     
     total_results = {
         'verified': 0,
@@ -420,19 +421,18 @@ def process_verification_batch(properties):
     # Batch for database updates
     update_batch = []
     updates_processed = 0
-    DB_UPDATE_BATCH_SIZE = 100  # Update database after every 100 properties
     
     try:
         for prop in properties:
             try:
-                result = process_single_property(prop, connection, update_batch)
+                result = process_single_property(prop, update_batch)
                 # Update total counts
                 for key in total_results:
                     total_results[key] += result.get(key, 0)
                 
                 # Check if we need to process a batch of updates
-                if len(update_batch) >= DB_UPDATE_BATCH_SIZE:
-                    updated, failed = batch_update_verification_status(update_batch, connection)
+                if len(update_batch) >= DB_BATCH_SIZE:
+                    updated, failed = batch_update_verification_status(update_batch)
                     updates_processed += updated
                     update_batch = []  # Clear the batch
                     logger.info(f"Processed batch update of {updated} properties")
@@ -442,18 +442,21 @@ def process_verification_batch(properties):
         
         # Process any remaining updates
         if update_batch:
-            updated, failed = batch_update_verification_status(update_batch, connection)
+            updated, failed = batch_update_verification_status(update_batch)
             updates_processed += updated
             logger.info(f"Processed final batch update of {updated} properties")
     
-    finally:
-        close_connection(connection)
+    except Exception as e:
+        logger.error(f"Error processing verification batch: {e}")
     
     return total_results
 
 def add_failure_reason_column():
     """Add a failure_reason column to the properties table if it doesn't exist."""
-    connection = get_connection()
+    connection = db_connector.get_db_connection()
+    if not connection:
+        logger.error("Cannot add failure_reason column: No database connection")
+        return
     
     for retry in range(MAX_RETRIES):
         try:
@@ -479,19 +482,15 @@ def add_failure_reason_column():
             if retry < MAX_RETRIES - 1:
                 logger.info(f"Retrying... ({retry + 1}/{MAX_RETRIES})")
                 time.sleep(1)  # Wait before retrying
-                # Refresh connection
-                try:
-                    connection.close()
-                except:
-                    pass
-                connection = get_connection()
+                # Try to get a fresh connection
+                connection = db_connector.get_db_connection()
+                if not connection:
+                    return
             else:
                 logger.error("Max retries reached. Giving up.")
         finally:
             if 'cursor' in locals() and cursor:
                 cursor.close()
-    
-    close_connection(connection)
 
 def parse_arguments():
     """Parse command line arguments."""
@@ -565,10 +564,16 @@ def main():
     global api_request_counter
     api_request_counter = 0
     
+    # Ensure we have a valid database connection
+    if not db_connector.get_db_connection():
+        print("❌ Failed to get database connection. Exiting.")
+        return
+    
     # Display configuration
     print(f"⚙️ Configuration:")
     print(f"   Batch Size: {batch_size} properties")
-    print(f"   Sequential processing (no threading)")
+    print(f"   Sequential processing (shared app-wide connection)")
+    print(f"   DB Update Batch Size: {DB_BATCH_SIZE}")
     print(f"   API Rate Limits: Pause for 5s every 100 requests")
     if source:
         print(f"   Source Filter: {source}")

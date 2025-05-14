@@ -122,9 +122,9 @@ def index():
             'properties_by_state_source': []
         }
     finally:
-        if connection.is_connected():
+        if cursor:
             cursor.close()
-            connection.close()
+        # Don't close the connection as it's a shared global connection
     
     return render_template('scraper/index.html', 
                           status=scraper_status,
