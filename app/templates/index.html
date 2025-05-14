@@ -1,0 +1,200 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard - Real Estate Data System{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5 fw-bold text-primary">Real Estate Data Dashboard</h1>
+        <p class="lead text-muted">Overview of property data collection and verification</p>
+    </div>
+</div>
+
+<!-- Stats Overview Cards -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card h-100 border-0">
+            <div class="card-body text-center">
+                <h5 class="card-title fw-bold text-primary">Total Properties</h5>
+                <p class="display-4 mt-3 mb-0">{{ stats.total_properties }}</p>
+                <p class="text-muted">Properties in database</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100 border-0">
+            <div class="card-body text-center">
+                <h5 class="card-title fw-bold text-success">Verified Properties</h5>
+                <p class="display-4 mt-3 mb-0">{{ stats.verified_properties }}</p>
+                <p class="text-muted">Passed verification checks</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100 border-0">
+            <div class="card-body text-center">
+                <h5 class="card-title fw-bold text-danger">Failed Properties</h5>
+                <p class="display-4 mt-3 mb-0">{{ stats.total_properties - stats.verified_properties }}</p>
+                <p class="text-muted">Did not pass verification</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Verification Progress -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0">
+            <div class="card-body">
+                <h5 class="card-title fw-bold">Verification Progress</h5>
+                <div class="progress mt-3">
+                    {% set verified_percentage = (stats.verified_properties / stats.total_properties * 100) if stats.total_properties > 0 else 0 %}
+                    <div class="progress-bar bg-success" role="progressbar" style="width: {{ verified_percentage|round }}%">
+                        {{ verified_percentage|round }}%
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between mt-2">
+                    <small class="text-muted">{{ stats.verified_properties }} verified</small>
+                    <small class="text-muted">{{ stats.total_properties }} total</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Properties by Source -->
+    <div class="col-md-6 mb-4">
+        <div class="card border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title fw-bold">Properties by Source</h5>
+                <div style="height: 250px; max-height: 250px; overflow: hidden;" class="chart-container">
+                    <canvas id="sourceChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Properties by State -->
+    <div class="col-md-6 mb-4">
+        <div class="card border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title fw-bold">Top States</h5>
+                <div style="height: 250px; max-height: 250px; overflow: hidden;" class="chart-container">
+                    <canvas id="stateChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Links to Data Management -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card border-0 h-100">
+            <div class="card-body text-center">
+                <h5 class="card-title fw-bold">Property Scrapers</h5>
+                <p class="card-text">Run data collection from various sources</p>
+                <a href="/scraper" class="btn btn-primary">Go to Scrapers</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-0 h-100">
+            <div class="card-body text-center">
+                <h5 class="card-title fw-bold">Property Verification</h5>
+                <p class="card-text">Check and export verified properties</p>
+                <a href="/checker" class="btn btn-primary">Go to Verification</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Properties by Source Chart
+        var sourceCtx = document.getElementById('sourceChart').getContext('2d');
+        var sourceChart = new Chart(sourceCtx, {
+            type: 'bar',
+            data: {
+                labels: [{% for item in stats.properties_by_source %}'{{ item.source }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+                datasets: [{
+                    label: 'Properties',
+                    data: [{% for item in stats.properties_by_source %}{{ item.count }}{% if not loop.last %}, {% endif %}{% endfor %}],
+                    backgroundColor: [
+                        'rgba(54, 162, 235, 0.7)',
+                        'rgba(255, 99, 132, 0.7)',
+                        'rgba(255, 206, 86, 0.7)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                animation: {
+                    duration: 0 // Disable animation to reduce resource usage
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            boxWidth: 10
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Properties by State Chart
+        var stateCtx = document.getElementById('stateChart').getContext('2d');
+        var stateChart = new Chart(stateCtx, {
+            type: 'bar',
+            data: {
+                labels: [{% for item in stats.properties_by_state %}{% if loop.index <= 7 %}'{{ item.state }}'{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}],
+                datasets: [{
+                    label: 'Properties',
+                    data: [{% for item in stats.properties_by_state %}{% if loop.index <= 7 %}{{ item.count }}{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}],
+                    backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                animation: {
+                    duration: 0 // Disable animation
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            boxWidth: 10
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %} 

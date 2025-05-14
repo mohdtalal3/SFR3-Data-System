@@ -1,0 +1,3 @@
+@echo off
+echo Starting SFR3 Real Estate Data System...
+python app.py 

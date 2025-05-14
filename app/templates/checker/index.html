@@ -1,0 +1,505 @@
+{% extends "layout.html" %}
+
+{% block title %}Property Verification - Real Estate Data System{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5 fw-bold text-primary">Property Verification</h1>
+        <p class="lead text-muted">Verify properties and download verified data</p>
+    </div>
+</div>
+
+<!-- Verification Controls -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card border-0">
+            <div class="card-body">
+                <h5 class="card-title fw-bold">Run Verification</h5>
+                <form id="checkerForm" class="row g-3 mt-2">
+                    <div class="col-md-3">
+                        <label for="maxThreads" class="form-label">Threads</label>
+                        <input type="number" class="form-control" id="maxThreads" name="max_threads" min="1" max="50" value="10">
+                        <div class="form-text">Number of parallel threads</div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label for="totalProperties" class="form-label">Total Limit</label>
+                        <input type="number" class="form-control" id="totalProperties" name="total_properties" min="0" placeholder="All">
+                        <div class="form-text">Max properties to verify</div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label for="apiDelay" class="form-label">API Delay (sec)</label>
+                        <input type="number" class="form-control" id="apiDelay" name="api_delay" min="0.1" step="0.1" value="1">
+                        <div class="form-text">Seconds between requests</div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label for="sourceSelect" class="form-label">Source Filter</label>
+                        <select class="form-select" id="sourceSelect" name="source">
+                            <option value="">All Sources</option>
+                            <option value="zillow">Zillow</option>
+                            <option value="realtor">Realtor.com</option>
+                            <option value="redfin">Redfin</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-12 mt-2">
+                        <div class="alert alert-info" role="alert">
+                            <i class="bi bi-info-circle-fill"></i> The verification process will pause for 5 seconds after every 100 properties to avoid API rate limits.
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-12">
+                        <div class="alert alert-warning d-none" id="limitWarning" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill"></i> Processing more than 5,000 properties at once may take a long time.
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="includeFailed" name="include_failed" checked>
+                            <label class="form-check-label" for="includeFailed">
+                                Include API errors
+                            </label>
+                            <div class="form-text">Retry API_ERROR properties (including rate limit errors)</div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-12 mt-3">
+                        <button type="submit" class="btn btn-primary" id="startCheckerBtn">Start Verification</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title fw-bold">Data Export</h5>
+                <p class="card-text">Download verified properties as CSV file for further analysis</p>
+                <a href="/checker/download" class="btn btn-success">
+                    <i class="bi bi-download"></i> Download Verified Properties
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Verification Status -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0">
+            <div class="card-header bg-transparent border-0">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title fw-bold mb-0">Verification Status</h5>
+                    <span class="badge bg-{{ 'success' if status.running else 'secondary' }}" id="checkerStatus">
+                        {{ 'Running' if status.running else 'Idle' }}
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                <p class="card-text mb-3" id="checkerMessage">{{ status.message }}</p>
+                
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="progress mb-2">
+                            <div class="progress-bar bg-primary" id="checkerProgress" role="progressbar" 
+                                 style="width: {{ status.progress / status.total * 100 if status.total > 0 else 0 }}%">
+                                {{ status.progress }} / {{ status.total }}
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <small>Properties checked</small>
+                            <small class="text-muted" id="checkerProgressText">
+                                {{ status.progress }} / {{ status.total }}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row gx-2 gy-3">
+                    <div class="col-md-3">
+                        <div class="p-3 border rounded bg-success bg-opacity-10 text-success text-center">
+                            <h3 id="verifiedCount">{{ status.verified_count }}</h3>
+                            <small>Verified</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-3 border rounded bg-danger bg-opacity-10 text-danger text-center">
+                            <h3 id="failedCount">{{ status.failed_count }}</h3>
+                            <small>Failed</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="p-3 border rounded bg-secondary bg-opacity-10 text-secondary text-center">
+                            <h3 id="apiErrorCount">{{ status.api_error_count }}</h3>
+                            <small>API Errors</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="p-3 border rounded bg-warning bg-opacity-10 text-warning text-center">
+                            <h3 id="sqftCount">{{ status.square_footage_count }}</h3>
+                            <small>Sq. Footage</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="p-3 border rounded bg-info bg-opacity-10 text-info text-center">
+                            <h3 id="notInterestedCount">{{ status.not_interested_count }}</h3>
+                            <small>Not Interested</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Verification Statistics -->
+<div class="row">
+    <!-- Verification Status -->
+    <div class="col-md-5 mb-4">
+        <div class="card border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title fw-bold">Verification Status</h5>
+                <div style="height: 220px; max-height: 220px; overflow: hidden;" class="chart-container">
+                    <canvas id="verificationChart"></canvas>
+                </div>
+                <div class="d-flex justify-content-center mt-3">
+                    <div class="px-3">
+                        <span class="badge bg-success">{{ stats.verification_status.verified_count }}</span> Verified
+                    </div>
+                    <div class="px-3">
+                        <span class="badge bg-danger">{{ stats.verification_status.unverified_count }}</span> Unverified
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Verification by Source -->
+    <div class="col-md-7 mb-4">
+        <div class="card border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title fw-bold">Verification by Source</h5>
+                <div style="height: 220px; max-height: 220px; overflow: hidden;" class="chart-container">
+                    <canvas id="sourceVerificationChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Failure Reasons -->
+    <div class="col-md-6 mb-4">
+        <div class="card border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title fw-bold">Failure Reasons</h5>
+                <div style="height: 220px; max-height: 220px; overflow: hidden;" class="chart-container">
+                    <canvas id="failureChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Verification by State -->
+    <div class="col-md-6 mb-4">
+        <div class="card border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title fw-bold">Verification by State</h5>
+                <div style="max-height: 220px; overflow-y: auto;">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>State</th>
+                                <th>Verified</th>
+                                <th>Unverified</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in stats.verification_by_state %}
+                            <tr>
+                                <td>{{ item.state }}</td>
+                                <td>{{ item.verified_count }}</td>
+                                <td>{{ item.unverified_count }}</td>
+                                <td>{{ item.total_count }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Show warning when total properties is more than 5000
+        const totalPropertiesInput = document.getElementById('totalProperties');
+        const limitWarning = document.getElementById('limitWarning');
+        
+        totalPropertiesInput.addEventListener('input', function() {
+            const value = parseInt(this.value);
+            if (value > 5000) {
+                limitWarning.classList.remove('d-none');
+            } else {
+                limitWarning.classList.add('d-none');
+            }
+        });
+        
+        // Verification Status Chart
+        var statusCtx = document.getElementById('verificationChart').getContext('2d');
+        var statusChart = new Chart(statusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Verified', 'Unverified'],
+                datasets: [{
+                    data: [
+                        {{ stats.verification_status.verified_count }},
+                        {{ stats.verification_status.unverified_count }}
+                    ],
+                    backgroundColor: [
+                        'rgba(40, 167, 69, 0.7)',
+                        'rgba(220, 53, 69, 0.7)'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                animation: {
+                    duration: 0 // Disable animation
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            boxWidth: 10
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Verification by Source Chart
+        var sourceVerificationCtx = document.getElementById('sourceVerificationChart').getContext('2d');
+        var sourceVerificationChart = new Chart(sourceVerificationCtx, {
+            type: 'bar',
+            data: {
+                labels: [{% for item in stats.verification_by_source %}'{{ item.source }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+                datasets: [
+                    {
+                        label: 'Verified',
+                        data: [{% for item in stats.verification_by_source %}{{ item.verified_count }}{% if not loop.last %}, {% endif %}{% endfor %}],
+                        backgroundColor: 'rgba(40, 167, 69, 0.7)'
+                    },
+                    {
+                        label: 'Unverified',
+                        data: [{% for item in stats.verification_by_source %}{{ item.unverified_count }}{% if not loop.last %}, {% endif %}{% endfor %}],
+                        backgroundColor: 'rgba(220, 53, 69, 0.7)'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                animation: {
+                    duration: 0 // Disable animation
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            boxWidth: 10
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: true
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Failure Reasons Chart
+        var failureCtx = document.getElementById('failureChart').getContext('2d');
+        var failureChart = new Chart(failureCtx, {
+            type: 'pie',
+            data: {
+                labels: [{% for item in stats.failure_reasons %}'{{ item.failure_reason }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+                datasets: [{
+                    data: [{% for item in stats.failure_reasons %}{{ item.count }}{% if not loop.last %}, {% endif %}{% endfor %}],
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.7)',
+                        'rgba(54, 162, 235, 0.7)',
+                        'rgba(255, 206, 86, 0.7)',
+                        'rgba(75, 192, 192, 0.7)'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                animation: {
+                    duration: 0 // Disable animation
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            boxWidth: 10
+                        }
+                    }
+                }
+            }
+        });
+    });
+    
+    // Checker Form Submission
+    const checkerForm = document.getElementById('checkerForm');
+    const startCheckerBtn = document.getElementById('startCheckerBtn');
+    
+    // Status polling
+    let statusIntervalId = null;
+    
+    function startStatusPolling() {
+        // Clear any existing interval
+        if (statusIntervalId) {
+            clearInterval(statusIntervalId);
+        }
+        
+        // Set interval to update status every 3 seconds
+        statusIntervalId = setInterval(updateStatus, 3000);
+        
+        // Initial update
+        updateStatus();
+    }
+    
+    function updateStatus() {
+        fetch('/checker/status')
+            .then(response => response.json())
+            .then(data => {
+                if (!data) return;
+                
+                const progressPercent = data.total > 0 ? (data.progress / data.total) * 100 : 0;
+                
+                // Update status elements
+                document.getElementById('checkerMessage').textContent = data.message || '';
+                document.getElementById('checkerProgress').style.width = `${progressPercent}%`;
+                document.getElementById('checkerProgress').textContent = `${data.progress || 0} / ${data.total || 0}`;
+                
+                document.getElementById('checkerStatus').textContent = data.running ? 'Running' : 'Idle';
+                if (data.running) {
+                    document.getElementById('checkerStatus').classList.remove('bg-secondary');
+                    document.getElementById('checkerStatus').classList.add('bg-success');
+                } else {
+                    document.getElementById('checkerStatus').classList.remove('bg-success');
+                    document.getElementById('checkerStatus').classList.add('bg-secondary');
+                    
+                    // Stop polling if not running
+                    clearInterval(statusIntervalId);
+                    statusIntervalId = null;
+                    
+                    // Re-enable start button
+                    startCheckerBtn.disabled = false;
+                    startCheckerBtn.textContent = 'Start Verification';
+                }
+                
+                document.getElementById('checkerProgressText').textContent = `${data.progress || 0} / ${data.total || 0}`;
+                
+                // Update counters
+                document.getElementById('verifiedCount').textContent = data.verified_count || 0;
+                document.getElementById('failedCount').textContent = data.failed_count || 0;
+                document.getElementById('apiErrorCount').textContent = data.api_error_count || 0;
+                document.getElementById('sqftCount').textContent = data.square_footage_count || 0;
+                document.getElementById('notInterestedCount').textContent = data.not_interested_count || 0;
+            })
+            .catch(error => {
+                console.error('Error fetching status:', error);
+            });
+    }
+    
+    // Start polling on page load if checker is running
+    if (document.getElementById('checkerStatus').textContent.trim() === 'Running') {
+        startStatusPolling();
+    }
+    
+    // Handle page visibility changes
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'hidden') {
+            // Stop polling when page is hidden
+            if (statusIntervalId) {
+                clearInterval(statusIntervalId);
+            }
+        } else if (document.getElementById('checkerStatus').textContent.trim() === 'Running') {
+            // Resume polling when page becomes visible and checker is running
+            startStatusPolling();
+        }
+    });
+    
+    if (checkerForm) {
+        checkerForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Disable the button and show loading state
+            startCheckerBtn.disabled = true;
+            startCheckerBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...';
+            
+            // Get form data
+            const formData = new FormData(checkerForm);
+            
+            // Handle checkbox for include_failed
+            if (!formData.get('include_failed')) {
+                formData.set('include_failed', 'false');
+            }
+            
+            // Make API request
+            fetch('/checker/start', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Start polling for updates
+                    startStatusPolling();
+                    // Update status badge
+                    document.getElementById('checkerStatus').textContent = 'Running';
+                    document.getElementById('checkerStatus').classList.remove('bg-secondary');
+                    document.getElementById('checkerStatus').classList.add('bg-success');
+                } else {
+                    alert('Error: ' + data.message);
+                    // Re-enable the button
+                    startCheckerBtn.disabled = false;
+                    startCheckerBtn.textContent = 'Start Verification';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred: ' + error);
+                // Re-enable the button
+                startCheckerBtn.disabled = false;
+                startCheckerBtn.textContent = 'Start Verification';
+            });
+        });
+    }
+</script>
+{% endblock %} 

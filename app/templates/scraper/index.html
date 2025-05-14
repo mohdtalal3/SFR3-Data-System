@@ -1,0 +1,343 @@
+{% extends "layout.html" %}
+
+{% block title %}Scrapers - Real Estate Data System{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5 fw-bold text-primary">Property Scrapers</h1>
+        <p class="lead text-muted">Run and monitor property data collection from various sources</p>
+    </div>
+</div>
+
+<!-- Scraper Controls -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0">
+            <div class="card-body">
+                <h5 class="card-title fw-bold">Run Scrapers</h5>
+                <form id="scraperForm" class="row g-3 mt-2">
+                    <div class="col-md-4">
+                        <label for="scraperSelect" class="form-label">Select Scraper</label>
+                        <select class="form-select" id="scraperSelect" name="scraper">
+                            <option value="zillow">Zillow</option>
+                            <option value="realtor">Realtor.com</option>
+                            <option value="redfin">Redfin</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-8">
+                        <label for="statesSelect" class="form-label">Select States (optional)</label>
+                        <select class="form-select" id="statesSelect" name="states" multiple>
+                            <option value="Alabama">Alabama</option>
+                            <option value="Arkansas">Arkansas</option>
+                            <option value="Georgia">Georgia</option>
+                            <option value="Indiana">Indiana</option>
+                            <option value="Kansas">Kansas</option>
+                            <option value="Kentucky">Kentucky</option>
+                            <option value="Michigan">Michigan</option>
+                            <option value="Missouri">Missouri</option>
+                            <option value="North Carolina">North Carolina</option>
+                            <option value="Ohio">Ohio</option>
+                            <option value="South Carolina">South Carolina</option>
+                            <option value="Tennessee">Tennessee</option>
+                            <option value="Wisconsin">Wisconsin</option>
+                        </select>
+                        <div class="form-text">Leave empty to run for all states</div>
+                    </div>
+                    
+                    <div class="col-12 mt-3">
+                        <button type="submit" class="btn btn-primary" id="startScraperBtn">Start Scraper</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scraper Status -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card h-100 border-0">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="card-title fw-bold mb-0">Zillow Scraper</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text mb-2" id="zillowMessage">{{ status.zillow.message }}</p>
+                <div class="progress mb-2">
+                    <div class="progress-bar bg-primary" id="zillowProgress" role="progressbar" style="width: {{ status.zillow.progress / status.zillow.total * 100 if status.zillow.total > 0 else 0 }}%">
+                        {{ status.zillow.progress }} / {{ status.zillow.total }}
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="badge bg-{{ 'success' if status.zillow.running else 'secondary' }}" id="zillowStatus">
+                        {{ 'Running' if status.zillow.running else 'Idle' }}
+                    </span>
+                    <small class="text-muted" id="zillowProgressText">
+                        {{ status.zillow.progress }} / {{ status.zillow.total }}
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card h-100 border-0">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="card-title fw-bold mb-0">Realtor Scraper</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text mb-2" id="realtorMessage">{{ status.realtor.message }}</p>
+                <div class="progress mb-2">
+                    <div class="progress-bar bg-primary" id="realtorProgress" role="progressbar" style="width: {{ status.realtor.progress / status.realtor.total * 100 if status.realtor.total > 0 else 0 }}%">
+                        {{ status.realtor.progress }} / {{ status.realtor.total }}
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="badge bg-{{ 'success' if status.realtor.running else 'secondary' }}" id="realtorStatus">
+                        {{ 'Running' if status.realtor.running else 'Idle' }}
+                    </span>
+                    <small class="text-muted" id="realtorProgressText">
+                        {{ status.realtor.progress }} / {{ status.realtor.total }}
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card h-100 border-0">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="card-title fw-bold mb-0">Redfin Scraper</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text mb-2" id="redfinMessage">{{ status.redfin.message }}</p>
+                <div class="progress mb-2">
+                    <div class="progress-bar bg-primary" id="redfinProgress" role="progressbar" style="width: {{ status.redfin.progress / status.redfin.total * 100 if status.redfin.total > 0 else 0 }}%">
+                        {{ status.redfin.progress }} / {{ status.redfin.total }}
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="badge bg-{{ 'success' if status.redfin.running else 'secondary' }}" id="redfinStatus">
+                        {{ 'Running' if status.redfin.running else 'Idle' }}
+                    </span>
+                    <small class="text-muted" id="redfinProgressText">
+                        {{ status.redfin.progress }} / {{ status.redfin.total }}
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Section -->
+<div class="row">
+    <!-- Properties by Source -->
+    <div class="col-md-6 mb-4">
+        <div class="card border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title fw-bold">Properties by Source</h5>
+                <div style="height: 250px; max-height: 250px; overflow: hidden;" class="chart-container">
+                    <canvas id="sourceChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Properties by State and Source -->
+    <div class="col-md-6 mb-4">
+        <div class="card border-0 h-100">
+            <div class="card-body">
+                <h5 class="card-title fw-bold">Properties by State</h5>
+                <div style="max-height: 250px; overflow-y: auto;">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>State</th>
+                                <th>Source</th>
+                                <th>Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in stats.properties_by_state_source %}
+                            <tr>
+                                <td>{{ item.state }}</td>
+                                <td>{{ item.source }}</td>
+                                <td>{{ item.count }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Chart for Properties by Source
+    document.addEventListener('DOMContentLoaded', function() {
+        var sourceCtx = document.getElementById('sourceChart').getContext('2d');
+        var sourceChart = new Chart(sourceCtx, {
+            type: 'bar',
+            data: {
+                labels: [{% for item in stats.properties_by_source %}'{{ item.source }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+                datasets: [{
+                    label: 'Properties',
+                    data: [{% for item in stats.properties_by_source %}{{ item.count }}{% if not loop.last %}, {% endif %}{% endfor %}],
+                    backgroundColor: [
+                        'rgba(54, 162, 235, 0.7)',
+                        'rgba(255, 99, 132, 0.7)',
+                        'rgba(255, 206, 86, 0.7)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                animation: {
+                    duration: 0 // Disable animation to reduce resource usage
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            boxWidth: 10
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        });
+    });
+    
+    // Form submission and status updates
+    $(document).ready(function() {
+        let statusIntervalId = null;
+        
+        // Start the status update interval when the page loads
+        function startStatusInterval() {
+            // Clear any existing interval first
+            if (statusIntervalId) {
+                clearInterval(statusIntervalId);
+            }
+            // Set a longer interval to reduce server load (5 seconds instead of 2)
+            statusIntervalId = setInterval(updateStatus, 5000);
+            // Initial update immediately
+            updateStatus();
+        }
+        
+        // Stop the status update interval
+        function stopStatusInterval() {
+            if (statusIntervalId) {
+                clearInterval(statusIntervalId);
+                statusIntervalId = null;
+            }
+        }
+        
+        // Start interval when page loads
+        startStatusInterval();
+        
+        // Clean up interval when page is hidden or exited
+        $(window).on('beforeunload', stopStatusInterval);
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'hidden') {
+                stopStatusInterval();
+            } else {
+                startStatusInterval();
+            }
+        });
+        
+        $('#scraperForm').on('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            
+            // Disable the submit button while processing
+            $('#startScraperBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...');
+            
+            $.ajax({
+                url: '/scraper/start',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    if (response.success) {
+                        showAlert('success', response.message);
+                        // Update status immediately after starting
+                        updateStatus();
+                    } else {
+                        showAlert('danger', response.message);
+                    }
+                },
+                error: function() {
+                    showAlert('danger', 'Error starting scraper');
+                },
+                complete: function() {
+                    $('#startScraperBtn').prop('disabled', false).text('Start Scraper');
+                }
+            });
+        });
+        
+        function updateStatus() {
+            $.ajax({
+                url: '/scraper/status',
+                type: 'GET',
+                dataType: 'json',
+                timeout: 3000, // Add timeout to prevent hanging requests
+                success: function(data) {
+                    updateScraperStatus('zillow', data.zillow);
+                    updateScraperStatus('realtor', data.realtor);
+                    updateScraperStatus('redfin', data.redfin);
+                },
+                error: function() {
+                    console.log("Error fetching status");
+                    // If we get errors, slow down the polling
+                    if (statusIntervalId) {
+                        clearInterval(statusIntervalId);
+                        statusIntervalId = setInterval(updateStatus, 10000); // Try again in 10 seconds
+                    }
+                }
+            });
+        }
+        
+        function updateScraperStatus(scraperName, status) {
+            if (!status) return; // Guard against undefined status
+            
+            const progressPercent = status.total > 0 ? (status.progress / status.total) * 100 : 0;
+            $(`#${scraperName}Message`).text(status.message || '');
+            $(`#${scraperName}Progress`).css('width', `${progressPercent}%`);
+            $(`#${scraperName}Status`).text(status.running ? 'Running' : 'Idle').removeClass('bg-secondary bg-success').addClass(status.running ? 'bg-success' : 'bg-secondary');
+            $(`#${scraperName}ProgressText`).text(`${status.progress || 0} / ${status.total || 0}`);
+        }
+        
+        function showAlert(type, message) {
+            const alertHtml = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            
+            // Insert alert before the form
+            $('#scraperForm').before(alertHtml);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(function() {
+                $('.alert').alert('close');
+            }, 5000);
+        }
+    });
+</script>
+{% endblock %} 

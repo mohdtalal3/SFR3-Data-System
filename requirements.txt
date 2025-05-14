@@ -1,0 +1,9 @@
+requests==2.31.0
+mysql-connector-python==8.1.0
+python-dotenv==1.0.0 
+Flask==2.3.3
+Flask-Bootstrap==3.3.7.1
+pandas==2.1.1
+matplotlib==3.8.0
+plotly==5.17.0
+flask-wtf==1.2.1 
