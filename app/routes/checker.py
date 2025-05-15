@@ -9,6 +9,7 @@ import mysql.connector
 import pandas as pd
 import db_connector
 import sfr3_checker
+import random
 
 checker_bp = Blueprint('checker', __name__)
 
@@ -263,6 +264,21 @@ def run_checker_with_threading(source=None, include_failed=True, total_propertie
         checker_status['progress'] = 0
         checker_status['message'] = 'Starting property verification...'
         
+        # Store the original sleep function to restore it later
+        original_sleep = time.sleep
+        
+        # Wrap the time.sleep function to enforce our API delay
+        def custom_sleep(seconds):
+            # Only apply our custom delay for very short sleeps that are likely random delays
+            if seconds < 0.5:  # If it's the small random delay in verify_property
+                # Add a random component between 0 and 2 seconds to the api_delay
+                random_delay = api_delay + random.uniform(0, 2)
+                return original_sleep(random_delay)  # Use our configured delay instead
+            return original_sleep(seconds)  # Otherwise use the original delay
+            
+        # Override the sleep function during verification
+        time.sleep = custom_sleep
+        
         # Prepare arguments for the sfr3_checker.py script
         args = []
         
@@ -329,14 +345,15 @@ def run_checker_with_threading(source=None, include_failed=True, total_propertie
         sfr3_checker.process_verification_batch = process_batch_with_updates
         
         # Run the main function
-        checker_status['message'] = 'Starting verification process with threading...'
+        checker_status['message'] = f'Starting verification process with {api_delay}s API delay...'
         if total_properties:
             checker_status['total'] = total_properties
             
         sfr3_checker.main()
         
-        # Restore the original function
+        # Restore the original function and sleep
         sfr3_checker.process_verification_batch = original_process_batch
+        time.sleep = original_sleep
         
         # Calculate time taken
         time_taken = time.time() - start_time
@@ -344,8 +361,14 @@ def run_checker_with_threading(source=None, include_failed=True, total_propertie
         
     except Exception as e:
         checker_status['message'] = f'Error: {str(e)}'
+        # Make sure we restore the original sleep function
+        if 'original_sleep' in locals():
+            time.sleep = original_sleep
     finally:
         checker_status['running'] = False
+        # One more safety check to restore original sleep function
+        if 'original_sleep' in locals():
+            time.sleep = original_sleep
 
 @checker_bp.route('/status')
 def get_status():

@@ -27,15 +27,7 @@
                     <h5 class="card-title fw-bold m-0">Verification Settings</h5>
                 </div>
                 <form id="checkerForm" class="row g-3 mt-2">
-                    <div class="col-md-3">
-                        <label for="maxThreads" class="form-label">
-                            <i class="bi bi-cpu me-1"></i>Threads
-                        </label>
-                        <input type="number" class="form-control" id="maxThreads" name="max_threads" min="1" max="50" value="10">
-                        <div class="form-text">Parallel verification threads</div>
-                    </div>
-                    
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <label for="totalProperties" class="form-label">
                             <i class="bi bi-calculator me-1"></i>Total Limit
                         </label>
@@ -43,7 +35,7 @@
                         <div class="form-text">Maximum properties to verify</div>
                     </div>
                     
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <label for="apiDelay" class="form-label">
                             <i class="bi bi-hourglass-split me-1"></i>API Delay
                         </label>
@@ -51,7 +43,7 @@
                         <div class="form-text">Seconds between API calls</div>
                     </div>
                     
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <label for="sourceSelect" class="form-label">
                             <i class="bi bi-filter me-1"></i>Source Filter
                         </label>
@@ -67,7 +59,7 @@
                         <div class="alert alert-info d-flex align-items-center" role="alert">
                             <i class="bi bi-info-circle-fill fs-5 me-2"></i>
                             <div>
-                                The verification process will pause for 5 seconds after every 100 API requests to avoid rate limiting.
+                                The verification process pauses for 10 seconds after every 20 API requests to avoid rate limiting. API delay is randomized between your chosen value and +2 seconds.
                             </div>
                         </div>
                     </div>

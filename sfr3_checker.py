@@ -223,10 +223,10 @@ def verify_property(property_data):
             # Increment API request counter and check if pause needed
             api_request_counter += 1
             
-            # Pause after every 100 API requests
-            if api_request_counter % 100 == 0:
-                logger.info(f"Pausing for 5 seconds after {api_request_counter} API requests...")
-                time.sleep(5)  # 5 second pause
+            # Pause after every 20 API requests
+            if api_request_counter % 10 == 0:
+                logger.info(f"Pausing for 10 seconds after {api_request_counter} API requests...")
+                time.sleep(10)  # 10 second pause
             
             response = requests.get(url, params={"address": address}, timeout=10)
             
@@ -574,7 +574,7 @@ def main():
     print(f"   Batch Size: {batch_size} properties")
     print(f"   Sequential processing (shared app-wide connection)")
     print(f"   DB Update Batch Size: {DB_BATCH_SIZE}")
-    print(f"   API Rate Limits: Pause for 5s every 100 requests")
+    print(f"   API Rate Limits: Pause for 10s every 20 requests")
     if source:
         print(f"   Source Filter: {source}")
     if total_properties:
