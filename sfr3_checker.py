@@ -22,6 +22,15 @@ logger = logging.getLogger("sfr3_checker")
 
 # Counter for API requests
 api_request_counter = 0
+# Counter for consecutive API errors
+consecutive_api_errors = 0
+# Maximum allowed consecutive API errors before stopping
+MAX_CONSECUTIVE_API_ERRORS = 20
+
+# Custom exception for stopping the verification process
+class StopVerificationError(Exception):
+    """Exception raised to halt the verification process due to too many API errors."""
+    pass
 
 # Load environment variables from .env file
 load_dotenv()
@@ -200,10 +209,13 @@ def verify_property(property_data):
         tuple: (is_verified, failure_reason)
     """
     global api_request_counter
+    global consecutive_api_errors
     
     # First check: square footage must be at least 800
     if property_data.get('square_footage', 0) < 800:
         logger.info(f"Property {property_data['property_id']} failed verification: square footage ({property_data.get('square_footage', 0)}) < 800")
+        # Reset consecutive API errors counter on non-API related failures
+        consecutive_api_errors = 0
         return False, "SQUARE_FOOTAGE"
     
     # Second check: check with SFR3 API
@@ -211,6 +223,8 @@ def verify_property(property_data):
         address = property_data.get('address', '')
         if not address:
             logger.warning(f"Property {property_data['property_id']} has no address, cannot check with API")
+            # Reset consecutive API errors counter on non-API related failures
+            consecutive_api_errors = 0
             return False, "NO_ADDRESS"
 
         # API Endpoint
@@ -223,7 +237,7 @@ def verify_property(property_data):
             # Increment API request counter and check if pause needed
             api_request_counter += 1
             
-            # Pause after every 20 API requests
+            # Pause after every 10 API requests
             if api_request_counter % 10 == 0:
                 logger.info(f"Pausing for 10 seconds after {api_request_counter} API requests...")
                 time.sleep(10)  # 10 second pause
@@ -237,13 +251,32 @@ def verify_property(property_data):
                     error_message = response_data.get("message", "")
                     if "Too many requests" in error_message:
                         logger.warning(f"SFR3 API rate limit exceeded for property {property_data['property_id']}: {error_message}")
+                        # Increment consecutive API errors
+                        consecutive_api_errors += 1
+                        
+                        # Check if we've reached the consecutive error threshold
+                        if consecutive_api_errors >= MAX_CONSECUTIVE_API_ERRORS:
+                            logger.error(f"Stopping verification process: {MAX_CONSECUTIVE_API_ERRORS} consecutive API errors detected. Server may be overloaded.")
+                            raise StopVerificationError(f"Stopping due to {MAX_CONSECUTIVE_API_ERRORS} consecutive API errors. Please try again later.")
+                            
                         return False, "API_ERROR"
                 except Exception:
                     # If we can't parse the response, still treat as API error
                     logger.warning(f"SFR3 API returned status 400 for property {property_data['property_id']}")
+                    # Increment consecutive API errors
+                    consecutive_api_errors += 1
+                    
+                    # Check if we've reached the consecutive error threshold
+                    if consecutive_api_errors >= MAX_CONSECUTIVE_API_ERRORS:
+                        logger.error(f"Stopping verification process: {MAX_CONSECUTIVE_API_ERRORS} consecutive API errors detected. Server may be overloaded.")
+                        raise StopVerificationError(f"Stopping due to {MAX_CONSECUTIVE_API_ERRORS} consecutive API errors. Please try again later.")
+                        
                     return False, "API_ERROR"
             
             if response.status_code == 200:
+                # Reset consecutive API errors on successful API call
+                consecutive_api_errors = 0
+                
                 data = response.json()
                 interested = data.get("interested")
                 reason = data.get("reason", "No reason provided")
@@ -256,14 +289,41 @@ def verify_property(property_data):
                     return True, None
             else:
                 logger.warning(f"SFR3 API returned non-200 status code {response.status_code} for property {property_data['property_id']}")
+                # Increment consecutive API errors
+                consecutive_api_errors += 1
+                
+                # Check if we've reached the consecutive error threshold
+                if consecutive_api_errors >= MAX_CONSECUTIVE_API_ERRORS:
+                    logger.error(f"Stopping verification process: {MAX_CONSECUTIVE_API_ERRORS} consecutive API errors detected. Server may be overloaded.")
+                    raise StopVerificationError(f"Stopping due to {MAX_CONSECUTIVE_API_ERRORS} consecutive API errors. Please try again later.")
+                    
                 return False, "API_ERROR"
                 
         except requests.exceptions.RequestException as e:
             logger.error(f"Error making request to SFR3 API for property {property_data['property_id']}: {str(e)}")
+            # Increment consecutive API errors
+            consecutive_api_errors += 1
+            
+            # Check if we've reached the consecutive error threshold
+            if consecutive_api_errors >= MAX_CONSECUTIVE_API_ERRORS:
+                logger.error(f"Stopping verification process: {MAX_CONSECUTIVE_API_ERRORS} consecutive API errors detected. Server may be overloaded.")
+                raise StopVerificationError(f"Stopping due to {MAX_CONSECUTIVE_API_ERRORS} consecutive API errors. Please try again later.")
+                
             return False, "API_ERROR"
             
+    except StopVerificationError:
+        # Re-raise StopVerificationError to be caught by the caller
+        raise
     except Exception as e:
         logger.error(f"Error checking property {property_data['property_id']} with SFR3 API: {str(e)}")
+        # Increment consecutive API errors
+        consecutive_api_errors += 1
+        
+        # Check if we've reached the consecutive error threshold
+        if consecutive_api_errors >= MAX_CONSECUTIVE_API_ERRORS:
+            logger.error(f"Stopping verification process: {MAX_CONSECUTIVE_API_ERRORS} consecutive API errors detected. Server may be overloaded.")
+            raise StopVerificationError(f"Stopping due to {MAX_CONSECUTIVE_API_ERRORS} consecutive API errors. Please try again later.")
+            
         return False, "API_ERROR"
     
     # If we get here, the property passed all checks
@@ -421,7 +481,7 @@ def process_verification_batch(properties):
     # Batch for database updates
     update_batch = []
     updates_processed = 0
-    
+        
     try:
         for prop in properties:
             try:
@@ -436,6 +496,23 @@ def process_verification_batch(properties):
                     updates_processed += updated
                     update_batch = []  # Clear the batch
                     logger.info(f"Processed batch update of {updated} properties")
+            except StopVerificationError as stop_err:
+                # Halting verification process due to too many API errors
+                # Log the warning and break out of the loop
+                property_id = prop.get('property_id', 'unknown')
+                logger.warning(f"Verification process stopped at property {property_id}: {str(stop_err)}")
+                
+                # Process any remaining updates before exiting
+                if update_batch:
+                    updated, failed = batch_update_verification_status(update_batch)
+                    updates_processed += updated
+                
+                # Add special "server_overload" key to the results to indicate we stopped due to API errors
+                total_results['server_overload'] = True
+                total_results['stop_message'] = str(stop_err)
+                
+                # Exit the loop
+                break
             except Exception as exc:
                 property_id = prop.get('property_id', 'unknown')
                 logger.error(f"Property {property_id} generated an exception: {exc}")
@@ -564,6 +641,10 @@ def main():
     global api_request_counter
     api_request_counter = 0
     
+    # Reset consecutive API errors counter
+    global consecutive_api_errors
+    consecutive_api_errors = 0
+    
     # Ensure we have a valid database connection
     if not db_connector.get_db_connection():
         print("❌ Failed to get database connection. Exiting.")
@@ -574,7 +655,7 @@ def main():
     print(f"   Batch Size: {batch_size} properties")
     print(f"   Sequential processing (shared app-wide connection)")
     print(f"   DB Update Batch Size: {DB_BATCH_SIZE}")
-    print(f"   API Rate Limits: Pause for 10s every 20 requests")
+    print(f"   API Rate Limits: Pause for 10s every 10 requests")
     if source:
         print(f"   Source Filter: {source}")
     if total_properties:
@@ -606,6 +687,9 @@ def main():
             'no_address': 0
         }
         
+        server_overload_detected = False
+        overload_message = ""
+        
         # Process properties in batches
         while True:
             # If we have a total limit, adjust the batch size for the last batch
@@ -628,6 +712,17 @@ def main():
             
             print(f"🔄 Processing batch of {len(properties)} properties sequentially...")
             batch_counts = process_verification_batch(properties)
+            
+            # Check if verification was stopped due to too many API errors
+            if batch_counts.get('server_overload', False):
+                server_overload_detected = True
+                overload_message = batch_counts.get('stop_message', "Too many consecutive API errors")
+                # Remove these special keys before updating the counts
+                batch_counts.pop('server_overload', None)
+                batch_counts.pop('stop_message', None)
+                print(f"⚠️ Warning: {overload_message}")
+                print(f"❌ Verification process stopped due to server overload. Please try again later.")
+            
             properties_verified += len(properties)
             
             # Update total counts
@@ -641,8 +736,12 @@ def main():
                  f"{batch_counts['no_address']} no address, "
                  f"{batch_counts['api_error']} API errors")
             
-            # Add a smaller delay between batches
-            time.sleep(1)
+            # Stop processing if server overload was detected
+            if server_overload_detected:
+                break
+                
+                # Add a smaller delay between batches
+                time.sleep(1)
     
     except KeyboardInterrupt:
         print("\n⚠️ Verification process interrupted by user.")
@@ -656,6 +755,11 @@ def main():
          f"{total_counts['not_interested']} not interested, "
          f"{total_counts['no_address']} no address, "
          f"{total_counts['api_error']} API errors")
+    
+    if server_overload_detected:
+        print(f"\n❌ IMPORTANT: Verification stopped early due to server overload.")
+        print(f"   {overload_message}")
+        print(f"   Please wait for some time before trying again.")
 
 if __name__ == "__main__":
     main()

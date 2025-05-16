@@ -128,6 +128,15 @@
             <div class="card-body">
                 <p class="card-text mb-3 text-secondary" id="checkerMessage">{{ status.message }}</p>
                 
+                <!-- Server Overload Warning -->
+                <div id="serverOverloadAlert" class="alert alert-danger d-flex align-items-center mb-4 {{ 'd-none' if not status.server_overload else '' }}" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill fs-4 me-2"></i>
+                    <div>
+                        <strong>Verification Stopped!</strong> The server is experiencing overload due to too many API requests.
+                        <br>All processed properties have been saved. Please try again later.
+                    </div>
+                </div>
+                
                 <div class="row mb-4">
                     <div class="col-12">
                         <div class="progress mb-2" style="height: 15px;">
@@ -503,6 +512,14 @@
                 document.getElementById('apiErrorCount').textContent = data.api_error_count || 0;
                 document.getElementById('sqftCount').textContent = data.square_footage_count || 0;
                 document.getElementById('notInterestedCount').textContent = data.not_interested_count || 0;
+                
+                // Show/hide server overload alert
+                const serverOverloadAlert = document.getElementById('serverOverloadAlert');
+                if (data.server_overload) {
+                    serverOverloadAlert.classList.remove('d-none');
+                } else {
+                    serverOverloadAlert.classList.add('d-none');
+                }
             })
             .catch(error => {
                 console.error('Error fetching status:', error);

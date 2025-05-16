@@ -173,30 +173,26 @@ def _initialize_tables():
         
         # Create properties table if it doesn't exist
         cursor.execute("""
-        CREATE TABLE IF NOT EXISTS properties (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            property_id VARCHAR(50) NOT NULL UNIQUE,
-            address TEXT,
-            city VARCHAR(100),
-            state VARCHAR(50),
-            zip VARCHAR(20),
-            price DECIMAL(12, 2),
-            bedrooms DECIMAL(5, 2),
-            bathrooms DECIMAL(5, 2),
-            square_footage INT,
-            lot_size VARCHAR(50),
-            year_built INT,
-            property_type VARCHAR(50),
-            source VARCHAR(50),
-            url TEXT,
-            is_verified BOOLEAN DEFAULT FALSE,
-            failure_reason VARCHAR(50),
-            date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            status VARCHAR(50) DEFAULT 'active',
-            photo_urls TEXT,
-            raw_data LONGTEXT
-        )
-        """)
+            CREATE TABLE IF NOT EXISTS properties (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                property_id VARCHAR(255) UNIQUE,
+                state VARCHAR(100),
+                property_type VARCHAR(100),
+                occupancy_status VARCHAR(50),
+                address TEXT,
+                zip_code VARCHAR(20),
+                square_footage FLOAT,
+                bedrooms INT,
+                bathrooms DOUBLE,
+                year_built INT,
+                after_repair_value FLOAT,
+                url TEXT,
+                is_verified BOOLEAN DEFAULT FALSE,
+                failure_reason VARCHAR(50) NULL,
+                source VARCHAR(50),
+                date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """)
         
         # Ensure bathrooms column is DOUBLE type
         try:
@@ -210,7 +206,7 @@ def _initialize_tables():
         logger.info("Tables created or already exist")
         cursor.close()
         return True
-    
+            
     except mysql.connector.Error as err:
         logger.error(f"Error initializing tables: {err}")
         return False
@@ -310,13 +306,14 @@ def insert_property(property_data, source):
         
         # Prepare the SQL query
         insert_query = """
-        INSERT INTO properties
+        INSERT IGNORE INTO properties
         (property_id, state, property_type, occupancy_status, address, zip_code, 
         square_footage, bedrooms, bathrooms, year_built, after_repair_value, url, is_verified, source)
         VALUES
         (%(property_id)s, %(state)s, %(property_type)s, %(occupancy_status)s, %(address)s, %(zip_code)s,
         %(square_footage)s, %(bedrooms)s, %(bathrooms)s, %(year_built)s, %(after_repair_value)s, %(url)s, %(is_verified)s, %(source)s)
         """
+
         
         cursor.execute(insert_query, formatted_data)
         connection.commit()
@@ -408,13 +405,14 @@ def batch_insert_properties(properties_list, source):
                 
                 # Prepare the SQL query for batch
                 insert_query = """
-                INSERT INTO properties
+                INSERT IGNORE INTO properties
                 (property_id, state, property_type, occupancy_status, address, zip_code, 
                 square_footage, bedrooms, bathrooms, year_built, after_repair_value, url, is_verified, source)
                 VALUES
                 (%(property_id)s, %(state)s, %(property_type)s, %(occupancy_status)s, %(address)s, %(zip_code)s,
                 %(square_footage)s, %(bedrooms)s, %(bathrooms)s, %(year_built)s, %(after_repair_value)s, %(url)s, %(is_verified)s, %(source)s)
-                """
+"""
+
                 
                 try:
                     # Execute batch insert

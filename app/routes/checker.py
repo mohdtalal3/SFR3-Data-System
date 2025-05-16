@@ -24,7 +24,8 @@ checker_status = {
     'no_address_count': 0,
     'progress': 0,
     'total': 0,
-    'message': 'Idle'
+    'message': 'Idle',
+    'server_overload': False
 }
 
 def run_checker_thread(batch_size=50, source=None, include_failed=True, total_properties=None, api_delay=1):
@@ -41,6 +42,7 @@ def run_checker_thread(batch_size=50, source=None, include_failed=True, total_pr
         checker_status['no_address_count'] = 0
         checker_status['progress'] = 0
         checker_status['message'] = 'Starting property verification...'
+        checker_status['server_overload'] = False
         
         # Get properties to check
         properties_verified = 0
@@ -263,6 +265,7 @@ def run_checker_with_threading(source=None, include_failed=True, total_propertie
         checker_status['no_address_count'] = 0
         checker_status['progress'] = 0
         checker_status['message'] = 'Starting property verification...'
+        checker_status['server_overload'] = False
         
         # Store the original sleep function to restore it later
         original_sleep = time.sleep
@@ -306,6 +309,13 @@ def run_checker_with_threading(source=None, include_failed=True, total_propertie
         # Create a status update function to track progress
         def update_status(batch_counts, properties_verified, total):
             nonlocal last_progress
+            
+            # Check if verification was stopped due to too many API errors
+            if batch_counts.get('server_overload', False):
+                error_message = batch_counts.get('stop_message', "Too many consecutive API errors")
+                checker_status['message'] = f"⚠️ STOPPED: {error_message}. Properties processed before stopping are saved."
+                checker_status['server_overload'] = True
+                return
             
             # Check if we crossed a 100-property boundary
             crossed_hundred_mark = (last_progress // 100) < (properties_verified // 100)
