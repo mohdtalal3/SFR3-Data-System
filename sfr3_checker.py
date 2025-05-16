@@ -240,7 +240,7 @@ def verify_property(property_data):
             # Pause after every 10 API requests
             if api_request_counter % 10 == 0:
                 logger.info(f"Pausing for 10 seconds after {api_request_counter} API requests...")
-                time.sleep(10)  # 10 second pause
+                time.sleep(20)  # 10 second pause
             
             response = requests.get(url, params={"address": address}, timeout=10)
             
