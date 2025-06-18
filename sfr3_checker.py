@@ -41,6 +41,87 @@ RECOMMENDED_LIMIT = 5000  # Recommended maximum properties to process at once
 MAX_RETRIES = 3  # Maximum number of retries for db operations
 DB_BATCH_SIZE = 100  # Size of batches for database updates
 
+def get_total_properties_to_verify(source=None, include_failed=True, retry_api_only=False):
+    """Get the total count of properties that need verification."""
+    connection = db_connector.get_db_connection()
+    if not connection:
+        logger.error("Cannot count properties: No database connection")
+        return 0
+    
+    for retry in range(MAX_RETRIES):
+        try:
+            cursor = connection.cursor()
+            
+            # Use the same query logic as get_properties_to_verify but count only
+            if retry_api_only:
+                # Only count properties with API_ERROR
+                if source:
+                    query = """
+                    SELECT COUNT(*) as total
+                    FROM properties
+                    WHERE failure_reason = 'API_ERROR' AND source LIKE %s
+                    """
+                    cursor.execute(query, (f"%{source}%",))
+                else:
+                    query = """
+                    SELECT COUNT(*) as total
+                    FROM properties
+                    WHERE failure_reason = 'API_ERROR'
+                    """
+                    cursor.execute(query)
+            elif source and include_failed:
+                query = """
+                SELECT COUNT(*) as total
+                FROM properties
+                WHERE (is_verified = FALSE OR failure_reason = 'API_ERROR') AND source LIKE %s
+                """
+                cursor.execute(query, (f"%{source}%",))
+            elif source and not include_failed:
+                query = """
+                SELECT COUNT(*) as total
+                FROM properties
+                WHERE is_verified = FALSE AND (failure_reason IS NULL OR failure_reason = 'API_ERROR') AND source LIKE %s
+                """
+                cursor.execute(query, (f"%{source}%",))
+            elif include_failed:
+                query = """
+                SELECT COUNT(*) as total
+                FROM properties
+                WHERE is_verified = FALSE OR failure_reason = 'API_ERROR'
+                """
+                cursor.execute(query)
+            else:
+                query = """
+                SELECT COUNT(*) as total
+                FROM properties
+                WHERE is_verified = FALSE AND (failure_reason IS NULL OR failure_reason = 'API_ERROR')
+                """
+                cursor.execute(query)
+            
+            result = cursor.fetchone()
+            total_count = result[0] if result else 0
+            logger.info(f"Total properties to verify: {total_count}")
+            cursor.close()
+            return total_count
+        
+        except mysql.connector.Error as err:
+            logger.error(f"Error counting properties: {err}")
+            if retry < MAX_RETRIES - 1:
+                logger.info(f"Retrying... ({retry + 1}/{MAX_RETRIES})")
+                time.sleep(1)  # Wait before retrying
+                # Try to get a fresh connection
+                connection = db_connector.get_db_connection()
+                if not connection:
+                    return 0
+            else:
+                logger.error("Max retries reached. Giving up.")
+                return 0
+        finally:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+    
+    return 0
+
 def get_properties_to_verify(batch_size=DEFAULT_BATCH_SIZE, source=None, include_failed=True, retry_api_only=False):
     """Get a batch of properties from the database."""
     connection = db_connector.get_db_connection()
@@ -328,6 +409,59 @@ def verify_property(property_data):
     
     # If we get here, the property passed all checks
     return True, None
+
+def update_verification_status(property_id, is_verified, failure_reason=None):
+    """Update verification status for a single property."""
+    connection = db_connector.get_db_connection()
+    if not connection:
+        logger.error(f"Cannot update verification status for {property_id}: No database connection")
+        return False
+        
+    for retry in range(MAX_RETRIES):
+        try:
+            cursor = connection.cursor()
+            
+            # Update the property status
+            if is_verified:
+                query = "UPDATE properties SET is_verified = TRUE, failure_reason = NULL WHERE property_id = %s"
+                cursor.execute(query, (property_id,))
+            else:
+                if failure_reason:
+                    query = "UPDATE properties SET is_verified = FALSE, failure_reason = %s WHERE property_id = %s"
+                    cursor.execute(query, (failure_reason, property_id))
+                else:
+                    query = "UPDATE properties SET is_verified = FALSE, failure_reason = NULL WHERE property_id = %s"
+                    cursor.execute(query, (property_id,))
+            
+            # Commit the transaction
+            connection.commit()
+            
+            if cursor.rowcount > 0:
+                logger.info(f"Updated verification status for property {property_id}: verified={is_verified}, reason={failure_reason}")
+                cursor.close()
+                return True
+            else:
+                logger.warning(f"Property {property_id} not found in database")
+                cursor.close()
+                return False
+                
+        except mysql.connector.Error as err:
+            logger.error(f"Error updating verification status for property {property_id}: {err}")
+            if retry < MAX_RETRIES - 1:
+                logger.info(f"Retrying... ({retry + 1}/{MAX_RETRIES})")
+                time.sleep(1)  # Wait before retrying
+                # Try to get a fresh connection
+                connection = db_connector.get_db_connection()
+                if not connection:
+                    return False
+            else:
+                logger.error("Max retries reached. Giving up.")
+                return False
+        finally:
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+    
+    return False
 
 def batch_update_verification_status(update_batch):
     """Update verification status for multiple properties in a single batch."""

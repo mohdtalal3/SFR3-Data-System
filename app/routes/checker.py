@@ -44,14 +44,23 @@ def run_checker_thread(batch_size=50, source=None, include_failed=True, total_pr
         checker_status['message'] = 'Starting property verification...'
         checker_status['server_overload'] = False
         
-        # Get properties to check
+        # Get total properties to verify upfront for accurate progress tracking
+        if total_properties:
+            checker_status['total'] = total_properties
+        else:
+            # Get actual count of properties to verify from database
+            total_count = sfr3_checker.get_total_properties_to_verify(source, include_failed)
+            checker_status['total'] = total_count
+        
+        checker_status['message'] = f'Found {checker_status["total"]} properties to verify'
+        
+        # Process properties one by one for real-time updates
         properties_verified = 0
-        max_properties = total_properties if total_properties else float('inf')
+        max_properties = total_properties if total_properties else checker_status['total']
         
         while properties_verified < max_properties:
-            # Calculate current batch size
-            remaining = max_properties - properties_verified
-            current_batch_size = min(batch_size, remaining)
+            # Get a small batch of properties (adjust for responsiveness)
+            current_batch_size = min(batch_size, max_properties - properties_verified)
             
             # Get a batch of properties
             properties = sfr3_checker.get_properties_to_verify(current_batch_size, source, include_failed)
@@ -59,54 +68,48 @@ def run_checker_thread(batch_size=50, source=None, include_failed=True, total_pr
             if not properties:
                 checker_status['message'] = 'No more properties found to verify'
                 break
-                
-            # Update total count on first batch
-            if properties_verified == 0:
-                if total_properties:
-                    checker_status['total'] = min(len(properties), total_properties)
-                    checker_status['message'] = f'Found {len(properties)} properties, will verify up to {total_properties}'
-                else:
-                    checker_status['total'] = len(properties)
-                checker_status['message'] = f'Found {len(properties)} properties to verify'
         
-            # Process each property
+            # Process each property individually with real-time updates
             for idx, prop in enumerate(properties):
-                checker_status['progress'] = properties_verified + idx + 1
+                current_property_index = properties_verified + idx + 1
+                checker_status['progress'] = current_property_index
                 property_id = prop['property_id']
                 
-                checker_status['message'] = f'Checking property {property_id} ({properties_verified + idx + 1} of {total_properties if total_properties else "all"})'
+                checker_status['message'] = f'Checking property {property_id} ({current_property_index}/{max_properties})'
                 
                 # Skip properties with permanent failure reasons
                 if prop.get('failure_reason') and prop.get('failure_reason') != 'API_ERROR':
-                    checker_status['message'] = f'Skipping property {property_id} with permanent failure reason: {prop.get("failure_reason")}'
-                    time.sleep(0.5)  # Short delay for user interface
+                    checker_status['message'] = f'Skipping property {property_id} with permanent failure reason: {prop.get("failure_reason")} ({current_property_index}/{max_properties})'
+                    time.sleep(0.1)  # Short delay for user interface
                     continue
                     
                 # Get detailed property information
                 property_details = sfr3_checker.get_property_details(property_id)
                 
                 if not property_details:
-                    checker_status['message'] = f'Error: Could not retrieve details for property {property_id}'
+                    checker_status['message'] = f'Error: Could not retrieve details for property {property_id} ({current_property_index}/{max_properties})'
                     checker_status['failed_count'] += 1
-                    time.sleep(0.5)
+                    time.sleep(0.1)
                     continue
                     
                 # Verify the property
                 is_verified, failure_reason = sfr3_checker.verify_property(property_details)
                 
-                # Update the status in the database
+                # Update the status in the database immediately
                 success = sfr3_checker.update_verification_status(property_id, is_verified, failure_reason)
                 
                 if not success:
-                    checker_status['message'] = f'Error updating verification status for property {property_id}'
-                    time.sleep(0.5)
+                    checker_status['message'] = f'Error updating verification status for property {property_id} ({current_property_index}/{max_properties})'
+                    time.sleep(0.1)
                     continue
                     
-                # Update counts
+                # Update counts immediately
                 if is_verified:
                     checker_status['verified_count'] += 1
+                    checker_status['message'] = f'✓ Verified property {property_id} ({current_property_index}/{max_properties})'
                 else:
                     checker_status['failed_count'] += 1
+                    checker_status['message'] = f'✗ Failed property {property_id}: {failure_reason} ({current_property_index}/{max_properties})'
                     
                     if failure_reason == 'API_ERROR':
                         checker_status['api_error_count'] += 1
@@ -117,7 +120,7 @@ def run_checker_thread(batch_size=50, source=None, include_failed=True, total_pr
                     elif failure_reason == 'NO_ADDRESS':
                         checker_status['no_address_count'] += 1
                         
-                # Throttle requests slightly to avoid overwhelming the API
+                # Add the configured API delay
                 time.sleep(api_delay)
             
             # Update properties_verified count
@@ -157,7 +160,8 @@ def index():
         cursor.execute("""
             SELECT 
                 SUM(CASE WHEN is_verified = TRUE THEN 1 ELSE 0 END) as verified_count,
-                SUM(CASE WHEN is_verified = FALSE THEN 1 ELSE 0 END) as unverified_count,
+                SUM(CASE WHEN is_verified = FALSE AND (failure_reason IS NULL OR failure_reason = 'API_ERROR') THEN 1 ELSE 0 END) as unverified_count,
+                SUM(CASE WHEN is_verified = FALSE AND failure_reason IS NOT NULL AND failure_reason != 'API_ERROR' THEN 1 ELSE 0 END) as failed_count,
                 COUNT(*) as total_count
             FROM properties
         """)
@@ -177,7 +181,8 @@ def index():
             SELECT 
                 source,
                 SUM(CASE WHEN is_verified = TRUE THEN 1 ELSE 0 END) as verified_count,
-                SUM(CASE WHEN is_verified = FALSE THEN 1 ELSE 0 END) as unverified_count,
+                SUM(CASE WHEN is_verified = FALSE AND (failure_reason IS NULL OR failure_reason = 'API_ERROR') THEN 1 ELSE 0 END) as unverified_count,
+                SUM(CASE WHEN is_verified = FALSE AND failure_reason IS NOT NULL AND failure_reason != 'API_ERROR' THEN 1 ELSE 0 END) as failed_count,
                 COUNT(*) as total_count
             FROM properties
             GROUP BY source
@@ -189,7 +194,8 @@ def index():
             SELECT 
                 state,
                 SUM(CASE WHEN is_verified = TRUE THEN 1 ELSE 0 END) as verified_count,
-                SUM(CASE WHEN is_verified = FALSE THEN 1 ELSE 0 END) as unverified_count,
+                SUM(CASE WHEN is_verified = FALSE AND (failure_reason IS NULL OR failure_reason = 'API_ERROR') THEN 1 ELSE 0 END) as unverified_count,
+                SUM(CASE WHEN is_verified = FALSE AND failure_reason IS NOT NULL AND failure_reason != 'API_ERROR' THEN 1 ELSE 0 END) as failed_count,
                 COUNT(*) as total_count
             FROM properties
             GROUP BY state
@@ -199,7 +205,7 @@ def index():
     except mysql.connector.Error as err:
         print(f"Error fetching verification stats: {err}")
         stats = {
-            'verification_status': {'verified_count': 0, 'unverified_count': 0, 'total_count': 0},
+            'verification_status': {'verified_count': 0, 'unverified_count': 0, 'failed_count': 0, 'total_count': 0},
             'failure_reasons': [],
             'verification_by_source': [],
             'verification_by_state': []
@@ -241,10 +247,10 @@ def start_checker():
         total_properties = None
         api_delay = 1  # Default to 1 second
     
-    # Start the SFR3 checker in a background thread
+    # Start the SFR3 checker in a background thread with real-time updates
     thread = threading.Thread(
-        target=run_checker_with_threading, 
-        args=(source, include_failed, total_properties, max_threads, api_delay)
+        target=run_checker_thread, 
+        args=(50, source, include_failed, total_properties, api_delay)  # batch_size=50 for responsive updates
     )
     thread.daemon = True
     thread.start()

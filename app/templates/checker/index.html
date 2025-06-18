@@ -142,13 +142,13 @@
                         <div class="progress mb-2" style="height: 15px;">
                             <div class="progress-bar progress-bar-striped progress-bar-animated" id="checkerProgress" role="progressbar" 
                                  style="width: {{ status.progress / status.total * 100 if status.total > 0 else 0 }}%">
-                                {{ status.progress }} / {{ status.total }}
+                                {{ status.progress }}/{{ status.total }}
                             </div>
                         </div>
                         <div class="d-flex justify-content-between">
                             <small class="text-secondary">Properties verified</small>
                             <small class="text-primary fw-bold" id="checkerProgressText">
-                                {{ status.progress }} / {{ status.total }}
+                                {{ status.progress }}/{{ status.total }}
                             </small>
                         </div>
                     </div>
@@ -209,14 +209,18 @@
                 <div style="height: 220px; max-height: 220px; overflow: hidden;" class="chart-container">
                     <canvas id="verificationChart"></canvas>
                 </div>
-                <div class="d-flex justify-content-center gap-4 mt-3">
+                <div class="d-flex justify-content-center gap-3 mt-3">
                     <div class="d-flex align-items-center">
                         <span class="badge bg-success me-2">{{ stats.verification_status.verified_count }}</span> 
                         <span class="text-secondary">Verified</span>
                     </div>
                     <div class="d-flex align-items-center">
-                        <span class="badge bg-danger me-2">{{ stats.verification_status.unverified_count }}</span> 
+                        <span class="badge bg-warning me-2">{{ stats.verification_status.unverified_count }}</span> 
                         <span class="text-secondary">Unverified</span>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="badge bg-danger me-2">{{ stats.verification_status.failed_count }}</span> 
+                        <span class="text-secondary">Not Interested</span>
                     </div>
                 </div>
             </div>
@@ -270,6 +274,7 @@
                                 <th>State</th>
                                 <th>Verified</th>
                                 <th>Unverified</th>
+                                <th>Not Interested</th>
                                 <th>Total</th>
                             </tr>
                         </thead>
@@ -278,7 +283,8 @@
                             <tr>
                                 <td class="fw-medium">{{ item.state }}</td>
                                 <td class="text-success">{{ item.verified_count }}</td>
-                                <td class="text-danger">{{ item.unverified_count }}</td>
+                                <td class="text-warning">{{ item.unverified_count }}</td>
+                                <td class="text-danger">{{ item.failed_count }}</td>
                                 <td class="fw-bold">{{ item.total_count }}</td>
                             </tr>
                             {% endfor %}
@@ -326,14 +332,16 @@
         var statusChart = new Chart(statusCtx, {
             type: 'doughnut',
             data: {
-                labels: ['Verified', 'Unverified'],
+                labels: ['Verified', 'Unverified', 'Not Interested'],
                 datasets: [{
                     data: [
                         {{ stats.verification_status.verified_count }},
-                        {{ stats.verification_status.unverified_count }}
+                        {{ stats.verification_status.unverified_count }},
+                        {{ stats.verification_status.failed_count }}
                     ],
                     backgroundColor: [
                         chartColors.success,
+                        chartColors.warning,
                         chartColors.danger
                     ],
                     borderWidth: 0
@@ -375,6 +383,12 @@
                     {
                         label: 'Unverified',
                         data: [{% for item in stats.verification_by_source %}{{ item.unverified_count }}{% if not loop.last %}, {% endif %}{% endfor %}],
+                        backgroundColor: chartColors.warning,
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Not Interested',
+                        data: [{% for item in stats.verification_by_source %}{{ item.failed_count }}{% if not loop.last %}, {% endif %}{% endfor %}],
                         backgroundColor: chartColors.danger,
                         borderRadius: 4
                     }
@@ -464,8 +478,8 @@
             clearInterval(statusIntervalId);
         }
         
-        // Set interval to update status every 3 seconds
-        statusIntervalId = setInterval(updateStatus, 3000);
+        // Set interval to update status every 1 second for real-time updates
+        statusIntervalId = setInterval(updateStatus, 1000);
         
         // Initial update
         updateStatus();
@@ -482,7 +496,7 @@
                 // Update status elements
                 document.getElementById('checkerMessage').textContent = data.message || '';
                 document.getElementById('checkerProgress').style.width = `${progressPercent}%`;
-                document.getElementById('checkerProgress').textContent = `${data.progress || 0} / ${data.total || 0}`;
+                document.getElementById('checkerProgress').textContent = `${data.progress || 0}/${data.total || 0}`;
                 
                 document.getElementById('checkerStatus').innerHTML = data.running ? 
                     '<i class="bi bi-play-fill me-1"></i> Running' : 
@@ -491,9 +505,13 @@
                 if (data.running) {
                     document.getElementById('checkerStatus').classList.remove('bg-secondary');
                     document.getElementById('checkerStatus').classList.add('bg-success');
+                    // Add animated stripes for active progress
+                    document.getElementById('checkerProgress').classList.add('progress-bar-animated');
                 } else {
                     document.getElementById('checkerStatus').classList.remove('bg-success');
                     document.getElementById('checkerStatus').classList.add('bg-secondary');
+                    // Remove animated stripes when not running
+                    document.getElementById('checkerProgress').classList.remove('progress-bar-animated');
                     
                     // Stop polling if not running
                     clearInterval(statusIntervalId);
@@ -504,7 +522,7 @@
                     startCheckerBtn.innerHTML = '<i class="bi bi-play-fill me-1"></i> Start Verification';
                 }
                 
-                document.getElementById('checkerProgressText').textContent = `${data.progress || 0} / ${data.total || 0}`;
+                document.getElementById('checkerProgressText').textContent = `${data.progress || 0}/${data.total || 0}`;
                 
                 // Update counters
                 document.getElementById('verifiedCount').textContent = data.verified_count || 0;
